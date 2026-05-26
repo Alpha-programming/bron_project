@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.env
+
+# Django
+*.log
+db.sqlite3
+media/
+staticfiles/
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Migrations
+**/migrations/*.py
+!**/migrations/__init__.py
+
+# Environment Variables
+.env.local
+.env.production
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Node
+node_modules/
+
+# Build files
+dist/
+build/
+
+# Cache
+.cache/
+
+# Temporary files
+*.tmp
+*.swp
+
+# Celery
+celerybeat-schedule
+
+# Redis dump
+dump.rdb
