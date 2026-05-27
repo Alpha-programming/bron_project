@@ -18,6 +18,12 @@ class User(AbstractUser):
         unique=True
     )
 
+    telegram_id = models.BigIntegerField(
+        unique=True,
+        null=True,
+        blank=True
+    )
+
     avatar = models.ImageField(
         upload_to="avatars/",
         null=True,
