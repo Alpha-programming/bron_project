@@ -38,7 +38,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'core.apps.CoreConfig',
-    'corsheaders'
+    'corsheaders',
+    "ninja_extra",
+    "ninja_jwt",
 ]
 
 MIDDLEWARE = [

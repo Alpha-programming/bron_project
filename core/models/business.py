@@ -1,6 +1,5 @@
 from django.db import models
-
-from core.models.user import User
+from .user import User
 
 
 class Business(models.Model):
@@ -25,6 +24,8 @@ class Business(models.Model):
 
     address = models.CharField(max_length=255)
 
+    phone = models.CharField(max_length=20)
+
     latitude = models.FloatField(
         null=True,
         blank=True
@@ -42,8 +43,3 @@ class Business(models.Model):
 
     def __str__(self):
         return self.name
-
-    class Meta:
-        verbose_name = "Business"
-        verbose_name_plural = "Businesses"
-        ordering = ["-created_at"]

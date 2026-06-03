@@ -1,6 +1,6 @@
 from django.db import models
 
-from core.models.booking import Booking
+from .booking import Booking
 
 
 class Payment(models.Model):
@@ -9,18 +9,12 @@ class Payment(models.Model):
         ("pending", "Pending"),
         ("paid", "Paid"),
         ("failed", "Failed"),
-    )
-
-    PAYMENT_METHODS = (
-        ("card", "Card"),
-        ("cash", "Cash"),
-        ("wallet", "Wallet"),
+        ("refunded", "Refunded"),
     )
 
     booking = models.OneToOneField(
         Booking,
-        on_delete=models.CASCADE,
-        related_name="payment"
+        on_delete=models.CASCADE
     )
 
     amount = models.DecimalField(
@@ -29,9 +23,12 @@ class Payment(models.Model):
     )
 
     payment_method = models.CharField(
-        max_length=20,
-        choices=PAYMENT_METHODS,
-        default="card"
+        max_length=50
+    )
+
+    transaction_id = models.CharField(
+        max_length=255,
+        blank=True
     )
 
     status = models.CharField(
@@ -40,16 +37,7 @@ class Payment(models.Model):
         default="pending"
     )
 
-    transaction_id = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True
-    )
-
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        ordering = ["-created_at"]
-
     def __str__(self):
-        return f"{self.booking} - {self.status}"
+        return str(self.id)

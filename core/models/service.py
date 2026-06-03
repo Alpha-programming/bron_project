@@ -1,6 +1,5 @@
 from django.db import models
-
-from core.models.business import Business
+from .business import Business
 
 
 class Service(models.Model):
@@ -13,18 +12,24 @@ class Service(models.Model):
 
     title = models.CharField(max_length=255)
 
-    description = models.TextField(blank=True)
+    description = models.TextField()
+
+    category = models.CharField(max_length=100)
+
+    image = models.ImageField(
+        upload_to="services/",
+        null=True,
+        blank=True
+    )
 
     duration = models.PositiveIntegerField(
-        help_text="Duration in minutes"
+        help_text="minutes"
     )
 
     price = models.DecimalField(
         max_digits=10,
         decimal_places=2
     )
-
-    category = models.CharField(max_length=100)
 
     is_active = models.BooleanField(default=True)
 

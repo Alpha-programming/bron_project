@@ -1,11 +1,20 @@
 from django.contrib import admin
 
-from core.models import *
+from core.models import (
+    User,
+    Business,
+    Service,
+    Booking,
+    Payment,
+    Review,
+    Notification,
+    Favorite,
+    WorkingHours,
+)
 
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-
     list_display = (
         "id",
         "username",
@@ -22,36 +31,25 @@ class UserAdmin(admin.ModelAdmin):
         "role",
         "is_verified",
         "is_staff",
-        "language",
-        "created_at",
     )
 
     search_fields = (
         "username",
         "email",
         "phone",
-        "telegram_id",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "last_login",
-        "date_joined",
     )
 
     ordering = ("-created_at",)
 
-    list_per_page = 20
-
 
 @admin.register(Business)
 class BusinessAdmin(admin.ModelAdmin):
-
     list_display = (
         "id",
         "name",
         "owner",
         "category",
+        "phone",
         "created_at",
     )
 
@@ -63,21 +61,13 @@ class BusinessAdmin(admin.ModelAdmin):
     search_fields = (
         "name",
         "address",
-        "owner__username",
-    )
-
-    readonly_fields = (
-        "created_at",
     )
 
     ordering = ("-created_at",)
 
-    list_per_page = 20
-
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-
     list_display = (
         "id",
         "title",
@@ -89,39 +79,30 @@ class ServiceAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
-        "is_active",
         "category",
+        "is_active",
     )
 
     search_fields = (
         "title",
-        "category",
         "business__name",
     )
-
-    ordering = ("title",)
-
-    list_per_page = 20
 
 
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
-
     list_display = (
         "id",
         "user",
         "service",
         "booking_date",
-        "start_time",
         "status",
         "total_price",
-        "created_at",
     )
 
     list_filter = (
         "status",
         "booking_date",
-        "created_at",
     )
 
     search_fields = (
@@ -129,43 +110,81 @@ class BookingAdmin(admin.ModelAdmin):
         "service__title",
     )
 
-    readonly_fields = (
-        "created_at",
-    )
-
-    ordering = ("-created_at",)
-
-    list_per_page = 20
-
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-
     list_display = (
         "id",
         "booking",
         "amount",
         "payment_method",
         "status",
-        "transaction_id",
         "created_at",
     )
 
     list_filter = (
         "status",
         "payment_method",
-        "created_at",
     )
 
     search_fields = (
         "transaction_id",
-        "booking__user__username",
     )
 
-    readonly_fields = (
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "business",
+        "rating",
         "created_at",
     )
 
-    ordering = ("-created_at",)
+    list_filter = (
+        "rating",
+    )
 
-    list_per_page = 20
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "title",
+        "is_read",
+        "created_at",
+    )
+
+    list_filter = (
+        "is_read",
+    )
+
+
+@admin.register(Favorite)
+class FavouriteAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "business",
+        "created_at",
+    )
+
+    search_fields = (
+        "user__username",
+        "business__name",
+    )
+
+
+@admin.register(WorkingHours)
+class WorkingHoursAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "business",
+        "day_of_week",
+    )
+
+    list_filter = (
+        "day_of_week",
+    )

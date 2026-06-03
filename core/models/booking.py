@@ -1,7 +1,10 @@
 from django.db import models
 
-from core.models.user import User
-from core.models.service import Service
+from .user import User
+from .service import Service
+from .business import Business
+from .branch import Branch
+from .staff import Staff
 
 
 class Booking(models.Model):
@@ -9,20 +12,23 @@ class Booking(models.Model):
     STATUS_CHOICES = (
         ("pending", "Pending"),
         ("confirmed", "Confirmed"),
-        ("cancelled", "Cancelled"),
         ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
     )
 
     user = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
-        related_name="bookings"
+        on_delete=models.CASCADE
+    )
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.CASCADE
     )
 
     service = models.ForeignKey(
         Service,
-        on_delete=models.CASCADE,
-        related_name="bookings"
+        on_delete=models.CASCADE
     )
 
     booking_date = models.DateField()
@@ -31,9 +37,24 @@ class Booking(models.Model):
 
     end_time = models.TimeField()
 
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.CASCADE,
+        related_name="bookings"
+    )
+
+    staff = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bookings"
+    )
+
     total_price = models.DecimalField(
         max_digits=10,
-        decimal_places=2
+        decimal_places=2,
+        default=0
     )
 
     status = models.CharField(
@@ -47,10 +68,5 @@ class Booking(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-        indexes = [
-            models.Index(fields=["booking_date"]),
-            models.Index(fields=["status"]),
-        ]
-
     def __str__(self):
-        return f"{self.user.username} - {self.service.title}"
+        return f"{self.user} - {self.service}"
