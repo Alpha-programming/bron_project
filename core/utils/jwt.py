@@ -1,6 +1,10 @@
 import jwt
 
-from datetime import datetime, timedelta
+from datetime import (
+    datetime,
+    timedelta,
+)
+
 from django.conf import settings
 
 from core.models import User
@@ -46,6 +50,7 @@ def get_user_from_token(token):
         return None
 
     try:
+
         return User.objects.get(
             id=payload["user_id"]
         )

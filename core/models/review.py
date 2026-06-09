@@ -2,6 +2,9 @@ from django.db import models
 
 from .user import User
 from .business import Business
+from django.core.validators import MaxValueValidator
+
+from django.core.validators import MinValueValidator
 
 
 class Review(models.Model):
@@ -16,7 +19,17 @@ class Review(models.Model):
         on_delete=models.CASCADE
     )
 
-    rating = models.PositiveSmallIntegerField()
+    rating = models.PositiveSmallIntegerField(
+
+        validators=[
+
+            MinValueValidator(1),
+
+            MaxValueValidator(5)
+
+        ]
+
+    )
 
     comment = models.TextField()
 

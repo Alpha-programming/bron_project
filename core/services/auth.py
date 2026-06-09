@@ -1,9 +1,12 @@
-from ninja.errors import HttpError
-
 from django.contrib.auth import authenticate
 
+from ninja.errors import HttpError
+
 from core.models import User
-from core.utils.jwt import create_access_token
+
+from core.utils.jwt import (
+    create_access_token,
+)
 
 
 def register_user(data):
@@ -24,6 +27,15 @@ def register_user(data):
         raise HttpError(
             400,
             "Email already exists"
+        )
+
+    if User.objects.filter(
+        phone=data.phone
+    ).exists():
+
+        raise HttpError(
+            400,
+            "Phone already exists"
         )
 
     user = User.objects.create_user(
@@ -50,7 +62,9 @@ def login_user(data):
             "Invalid username or password"
         )
 
-    token = create_access_token(user)
+    token = create_access_token(
+        user
+    )
 
     return {
         "access_token": token,

@@ -63,6 +63,23 @@ class Booking(models.Model):
         default="pending"
     )
 
+    guest_count = models.PositiveIntegerField(
+        default=1
+    )
+    products = models.ManyToManyField(
+        "Product",
+        blank=True,
+        related_name="bookings"
+    )
+
+    notes = models.TextField(
+        blank=True
+    )
+
+    cancel_reason = models.TextField(
+        blank=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

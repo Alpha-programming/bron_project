@@ -29,3 +29,6 @@ class UserOutSchema(Schema):
     email: str
     phone: str
     role: str
+
+class MessageSchema(Schema):
+    detail: str

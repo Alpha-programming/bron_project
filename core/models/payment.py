@@ -22,8 +22,21 @@ class Payment(models.Model):
         decimal_places=2
     )
 
+    PAYMENT_METHODS = (
+        ("cash", "Cash"),
+        ("card", "Card"),
+        ("stripe", "Stripe"),
+        ("payme", "Payme"),
+    )
+
     payment_method = models.CharField(
-        max_length=50
+        max_length=20,
+        choices=PAYMENT_METHODS
+    )
+
+    paid_at = models.DateTimeField(
+        null=True,
+        blank=True
     )
 
     transaction_id = models.CharField(

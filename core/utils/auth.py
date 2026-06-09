@@ -1,19 +1,27 @@
 from ninja.errors import HttpError
 
-from core.utils.jwt import get_user_from_token
+from core.utils.jwt import (
+    get_user_from_token,
+)
 
 
 def get_current_user(request):
 
-    auth_header = request.headers.get("Authorization")
+    auth_header = request.headers.get(
+        "Authorization"
+    )
 
     if not auth_header:
+
         raise HttpError(
             401,
             "Authorization token required"
         )
 
-    if not auth_header.startswith("Bearer "):
+    if not auth_header.startswith(
+        "Bearer "
+    ):
+
         raise HttpError(
             401,
             "Invalid authorization format. Use Bearer <token>"
@@ -24,9 +32,12 @@ def get_current_user(request):
         ""
     )
 
-    user = get_user_from_token(token)
+    user = get_user_from_token(
+        token
+    )
 
     if not user:
+
         raise HttpError(
             401,
             "Invalid or expired token"

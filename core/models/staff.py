@@ -14,6 +14,12 @@ class Staff(models.Model):
 
     position = models.CharField(max_length=100)
 
+    photo = models.ImageField(
+        upload_to="staff/",
+        blank=True,
+        null=True
+    )
+
     phone = models.CharField(
         max_length=20,
         blank=True

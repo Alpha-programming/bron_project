@@ -20,7 +20,17 @@ class Business(models.Model):
         blank=True
     )
 
-    category = models.CharField(max_length=100)
+    CATEGORY_CHOICES = (
+        ("gym", "Gym"),
+        ("spa", "Spa"),
+        ("salon", "Salon"),
+        ("clinic", "Clinic"),
+    )
+
+    category = models.CharField(
+        max_length=50,
+        choices=CATEGORY_CHOICES
+    )
 
     address = models.CharField(max_length=255)
 
@@ -37,6 +47,8 @@ class Business(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["-created_at"]

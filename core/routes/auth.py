@@ -16,13 +16,20 @@ from core.utils.auth import (
     get_current_user,
 )
 
-router = Router(tags=["Authentication"])
+router = Router(
+    tags=["Authentication"]
+)
 
 
 @router.post("/register")
-def register(request, payload: RegisterSchema):
+def register(
+    request,
+    payload: RegisterSchema
+):
 
-    user = register_user(payload)
+    user = register_user(
+        payload
+    )
 
     return {
         "message": "User created successfully",
@@ -34,9 +41,14 @@ def register(request, payload: RegisterSchema):
     "/login",
     response=LoginResponseSchema
 )
-def login(request, payload: LoginSchema):
+def login(
+    request,
+    payload: LoginSchema
+):
 
-    return login_user(payload)
+    return login_user(
+        payload
+    )
 
 
 @router.get(
@@ -45,4 +57,6 @@ def login(request, payload: LoginSchema):
 )
 def me(request):
 
-    return get_current_user(request)
+    return get_current_user(
+        request
+    )
