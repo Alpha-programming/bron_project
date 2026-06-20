@@ -1,4 +1,5 @@
 from ninja import Schema
+from datetime import time
 
 
 class WorkingHoursCreateSchema(Schema):
@@ -29,7 +30,7 @@ class WorkingHoursOutSchema(Schema):
 
     day_of_week: int
 
-    open_time: str
-    close_time: str
+    open_time: time
+    close_time: time
 
     is_closed: bool

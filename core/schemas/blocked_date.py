@@ -1,3 +1,5 @@
+from datetime import date
+
 from ninja import Schema
 
 
@@ -5,7 +7,7 @@ class BlockedDateCreateSchema(Schema):
 
     business_id: int
 
-    date: str
+    date: date
 
     reason: str | None = None
 
@@ -21,6 +23,6 @@ class BlockedDateOutSchema(Schema):
 
     business_id: int
 
-    date: str
+    date: date
 
     reason: str | None = None

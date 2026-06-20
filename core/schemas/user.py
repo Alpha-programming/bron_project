@@ -1,5 +1,7 @@
 from ninja import Schema
 
+class PhoneTgSchema(Schema):
+    phone: str
 
 class UserProfileOutSchema(Schema):
 
