@@ -140,6 +140,7 @@ USE_TZ = True
 
 # --- STATIC AND ASSET/MEDIA CHANNELS ---
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "static"  # Crucial deployment target for PythonAnywhere!
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -150,6 +151,17 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
 
 # --- JAZZMIN UI CONFIGURATION ---
 JAZZMIN_UI_TWEAKS = {

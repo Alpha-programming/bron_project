@@ -31,7 +31,7 @@ class Review(models.Model):
 
     )
 
-    comment = models.TextField()
+    comment = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

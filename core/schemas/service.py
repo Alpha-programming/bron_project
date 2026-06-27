@@ -1,5 +1,5 @@
 from ninja import Schema
-
+from decimal import Decimal
 from typing import Optional
 
 
@@ -12,7 +12,7 @@ class ServiceCreateSchema(Schema):
     category: str
 
     duration: int
-    price: float
+    price: Decimal
 
 
 class ServiceUpdateSchema(Schema):
@@ -22,7 +22,7 @@ class ServiceUpdateSchema(Schema):
     category: Optional[str] = None
 
     duration: Optional[int] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
 
     is_active: Optional[bool] = None
 
@@ -35,7 +35,12 @@ class ServiceListSchema(Schema):
     category: str
 
     duration: int
-    price: float
+    price: Decimal
+    image: Optional[str]
+
+    @staticmethod
+    def resolve_image(obj):
+        return obj.image.url if obj.image else None
 
 
 class ServiceOutSchema(Schema):
@@ -53,3 +58,8 @@ class ServiceOutSchema(Schema):
     price: float
 
     is_active: bool
+    image: Optional[str] = None
+
+    @staticmethod
+    def resolve_image(obj):
+        return obj.image.url if obj.image else None

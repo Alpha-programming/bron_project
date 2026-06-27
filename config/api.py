@@ -10,8 +10,8 @@ from core.routes.staff import router as staff_router
 from core.routes.working_hours import router as working_hours_router
 from core.routes.blocked_date import router as blocked_date_router
 from core.routes.booking import router as booking_router
-
-
+from core.routes.reviews import router as reviews_router
+from core.routes.favorites import router as favorites_router
 
 
 api = NinjaAPI(
@@ -68,6 +68,10 @@ api.add_router(
     "/bookings/",
     booking_router
 )
+
+api.add_router("/reviews", reviews_router)
+
+api.add_router("/favorites", favorites_router)
 
 @api.get("/")
 def root(request):

@@ -1,5 +1,5 @@
 from decimal import Decimal
-
+from datetime import datetime, date
 from ninja.errors import HttpError
 
 from core.models import (
@@ -189,3 +189,55 @@ def delete_booking(
     return {
         "message": "Booking deleted successfully"
     }
+
+from datetime import datetime, timedelta
+from core.models import WorkingHours  # Ensure WorkingHours model is available or mocked correctly
+
+def calculate_available_slots(business_id: int, staff_id: int, target_date: date) -> list:
+    """
+    Calculates operational 30-minute availability intervals on a target date.
+    """
+    # 1. Check global blockages
+    blocked = BlockedDate.objects.filter(business_id=business_id, date=target_date).exists()
+    if blocked:
+        return []
+
+    # 2. Extract day-of-week configuration (0 = Monday, 6 = Sunday)
+    weekday = target_date.weekday()
+    schedule = WorkingHours.objects.filter(business_id=business_id, day_of_week=weekday).first()
+    if not schedule or not getattr(schedule, 'is_working_day', True):
+        return []
+
+    # Fallback default hours if fields aren't present in model definition
+    start_time = getattr(schedule, 'start_time', datetime.strptime("09:00", "%H:%M").time())
+    end_time = getattr(schedule, 'end_time', datetime.strptime("18:00", "%H:%M").time())
+
+    slots = []
+    current_time = datetime.combine(target_date, start_time)
+    terminal_time = datetime.combine(target_date, end_time)
+    interval = timedelta(minutes=30)
+
+    # 3. Pull concurrent booked targets
+    existing_bookings = Booking.objects.filter(
+        staff_id=staff_id,
+        booking_date=target_date,
+        status__in=['PENDING', 'APPROVED', 'CONFIRMED']
+    ).values_list('start_time', 'end_time')
+
+    while current_time + interval <= terminal_time:
+        slot_start = current_time.time()
+        slot_end = (current_time + interval).time()
+
+        is_taken = False
+        for b_start, b_end in existing_bookings:
+            # Handle standard time format data comparisons cleanly
+            if not (slot_end <= b_start or slot_start >= b_end):
+                is_taken = True
+                break
+
+        if not is_taken:
+            slots.append(slot_start.strftime("%H:%M"))
+
+        current_time += interval
+
+    return slots

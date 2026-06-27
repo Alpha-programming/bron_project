@@ -47,3 +47,13 @@ def delete_service(user, service):
 
     service.delete()
     return {"message": "Service deleted successfully"}
+
+def get_distinct_service_categories() -> list[str]:
+    """
+    Returns a unique list of all active service categories currently on the platform.
+    """
+    return list(
+        Service.objects.filter(is_active=True)
+        .values_list("category", flat=True)
+        .distinct()
+    )

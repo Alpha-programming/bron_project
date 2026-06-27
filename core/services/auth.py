@@ -70,4 +70,5 @@ def login_user(data):
         "access_token": token,
         "user_id": user.id,
         "username": user.username,
+        "tg_token": None
     }

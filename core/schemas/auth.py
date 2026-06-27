@@ -1,3 +1,5 @@
+from typing import Optional
+
 from ninja import Schema
 
 class RegisterSchema(Schema):
@@ -14,6 +16,7 @@ class LoginResponseSchema(Schema):
     access_token: str
     user_id: int
     username: str
+    tg_token: Optional[str] = None
 
 class UserOutSchema(Schema):
     id: int

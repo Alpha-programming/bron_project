@@ -21,3 +21,7 @@ class UserProfileUpdateSchema(Schema):
     phone: str | None = None
     language: str | None = None
     telegram_id: int | None = None
+
+class ChangePasswordSchema(Schema):
+    old_password: str
+    new_password: str

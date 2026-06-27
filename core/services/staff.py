@@ -1,5 +1,5 @@
 from ninja.errors import HttpError
-from core.models import Staff, Business
+from core.models import Staff, Business, WorkingHours, Booking
 
 def create_staff(user, data):
     try:
@@ -45,3 +45,20 @@ def delete_staff(user, staff):
 
     staff.delete()
     return {"message": "Staff deleted successfully"}
+
+def get_staff_schedule_timeline(staff: Staff) -> dict:
+    """
+    Retrieves the operating hours schedule bound to the staff member's parent business entity.
+    """
+    hours = WorkingHours.objects.filter(business_id=staff.business_id).order_by('day_of_week')
+    return {
+        "staff_id": staff.id,
+        "full_name": staff.full_name,
+        "working_hours": list(hours)
+    }
+
+def get_staff_assigned_bookings(staff: Staff):
+    """
+    Retrieves all ongoing appointments assigned to this provider.
+    """
+    return Booking.objects.filter(staff=staff).select_related("user", "service", "branch", "business").order_by("-booking_date", "-start_time")

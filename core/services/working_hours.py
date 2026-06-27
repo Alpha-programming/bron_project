@@ -1,5 +1,5 @@
 from ninja.errors import HttpError
-
+from datetime import datetime
 from core.models import (
     WorkingHours,
     Business,
@@ -127,4 +127,36 @@ def delete_working_hours(
 
     return {
         "message": "Working hours deleted successfully"
+    }
+
+
+def get_today_business_schedule(business_id: int) -> dict:
+    """
+    Looks up the current day configuration to evaluate open status constraints.
+    """
+    # 0 = Monday, 6 = Sunday matching Django/Python standards
+    current_weekday = datetime.now().weekday()
+
+    schedule = WorkingHours.objects.filter(
+        business_id=business_id,
+        day_of_week=current_weekday
+    ).first()
+
+    if not schedule:
+        return {
+            "business_id": business_id,
+            "day_of_week": current_weekday,
+            "open_time": None,
+            "close_time": None,
+            "is_closed": True,
+            "msg": "No operational hours defined for this day."
+        }
+
+    return {
+        "business_id": business_id,
+        "day_of_week": current_weekday,
+        "open_time": schedule.open_time,
+        "close_time": schedule.close_time,
+        "is_closed": schedule.is_closed,
+        "msg": "Schedule pulled successfully."
     }

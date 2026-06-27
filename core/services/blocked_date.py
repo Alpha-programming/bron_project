@@ -1,5 +1,5 @@
 from ninja.errors import HttpError
-
+from datetime import datetime, date
 from core.models import (
     BlockedDate,
     Business,
@@ -125,4 +125,18 @@ def delete_blocked_date(
 
     return {
         "message": "Blocked date deleted successfully"
+    }
+
+
+def check_date_blockage(business_id: int, target_date: date) -> dict:
+    """
+    Checks the system to see if a particular day has been blocked by the merchant.
+    """
+    blockage = BlockedDate.objects.filter(business_id=business_id, date=target_date).first()
+
+    return {
+        "business_id": business_id,
+        "date": target_date,
+        "is_blocked": blockage is not None,
+        "reason": blockage.reason if blockage else None
     }

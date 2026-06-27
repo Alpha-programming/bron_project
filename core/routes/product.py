@@ -1,6 +1,6 @@
 from ninja import Router
 from core.security import JWTAuth
-from core.models import User
+from core.models import User, Product
 from core.schemas.product import (
     ProductCreateSchema,
     ProductUpdateSchema,
@@ -15,13 +15,13 @@ from core.services.product import (
     update_product,
     delete_product,
 )
+from typing import List
 
 router = Router(tags=["Products"])
 
 
 @router.post("/create", auth=JWTAuth(), response=ProductOutSchema)
 def create_product_view(request, data: ProductCreateSchema):
-    # FIX: Safely extract authenticated user identity from request context
     user = request.auth
     if not user or hasattr(user, '_wrapped'):
         user = User.objects.get(id=request.user.id)
@@ -33,9 +33,13 @@ def product_list(request):
     return get_products()
 
 
-@router.get("/{product_id}", response=ProductOutSchema)
-def product_detail(request, product_id: int):
-    return get_product(product_id)
+# --- FIXED: MOVED UP ABOVE THE DYNAMIC ID PARAMETER ---
+@router.get("/search", response=List[ProductOutSchema])
+def search_products(request, q: str):
+    """
+    Find warehouse retail inventory matches.
+    """
+    return Product.objects.filter(name__icontains=q)
 
 
 @router.get("/business/{business_id}", response=list[ProductListSchema])
@@ -43,9 +47,13 @@ def business_products(request, business_id: int):
     return get_business_products(business_id)
 
 
+@router.get("/{product_id}", response=ProductOutSchema)
+def product_detail(request, product_id: int):
+    return get_product(product_id)
+
+
 @router.put("/{product_id}", auth=JWTAuth(), response=ProductOutSchema)
 def update_product_view(request, product_id: int, data: ProductUpdateSchema):
-    # FIX: Safely extract authenticated user identity from request context
     user = request.auth
     if not user or hasattr(user, '_wrapped'):
         user = User.objects.get(id=request.user.id)
@@ -56,7 +64,6 @@ def update_product_view(request, product_id: int, data: ProductUpdateSchema):
 
 @router.delete("/{product_id}", auth=JWTAuth())
 def delete_product_view(request, product_id: int):
-    # FIX: Safely extract authenticated user identity from request context
     user = request.auth
     if not user or hasattr(user, '_wrapped'):
         user = User.objects.get(id=request.user.id)

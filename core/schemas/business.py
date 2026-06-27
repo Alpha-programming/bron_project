@@ -75,3 +75,10 @@ class BusinessOutSchema(Schema):
         # Converts datetime to clean string representation if needed
         return obj.created_at.strftime("%Y-%m-%d %H:%M:%S") if hasattr(obj.created_at, 'strftime') else str(
             obj.created_at)
+
+class BusinessStatsOutSchema(Schema):
+    total_bookings: int
+    pending_bookings: int
+    approved_bookings: int
+    cancelled_bookings: int
+    total_revenue: str
