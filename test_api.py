@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 
 # Target Base URL configured matching your layout port
-BASE_URL = "http://127.0.0.1:8002/api"
+BASE_URL = "https://uzbALPHA.pythonanywhere.com/api"
 
 # Global script state machine tracers
 TOKEN = None

@@ -46,6 +46,24 @@ class Business(models.Model):
         blank=True
     )
 
+    tin = models.CharField(
+        max_length=30,
+        blank=True
+    )
+
+    website = models.URLField(
+        blank=True
+    )
+
+    social_links = models.JSONField(
+        default=dict,
+        blank=True
+    )
+
+    comments = models.TextField(
+        blank=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     is_active = models.BooleanField(default=True)

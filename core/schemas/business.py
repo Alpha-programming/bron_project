@@ -1,5 +1,4 @@
 from ninja import Schema
-
 from typing import Optional
 
 
@@ -16,6 +15,11 @@ class BusinessCreateSchema(Schema):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
+    tin: Optional[str] = None
+    website: Optional[str] = None
+    social_links: dict = {}
+    comments: Optional[str] = None
+
 
 class BusinessUpdateSchema(Schema):
 
@@ -29,6 +33,11 @@ class BusinessUpdateSchema(Schema):
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+    tin: Optional[str] = None
+    website: Optional[str] = None
+    social_links: Optional[dict] = None
+    comments: Optional[str] = None
 
 
 class BusinessListSchema(Schema):
@@ -45,23 +54,32 @@ class BusinessListSchema(Schema):
 
 
 class BusinessOutSchema(Schema):
+
     id: int
 
-    # We keep these fields exactly as they are
     owner_id: int
     owner_username: str
 
     name: str
     description: str | None
+
     logo: str | None
+
     category: str
+
     address: str
     phone: str
+
     latitude: float | None = None
     longitude: float | None = None
+
+    tin: str | None = None
+    website: str | None = None
+    social_links: dict
+    comments: str | None = None
+
     created_at: str
 
-    # FIX: Add explicit resolvers so Ninja knows exactly how to map from the 'owner' relation
     @staticmethod
     def resolve_owner_id(obj):
         return obj.owner.id
@@ -72,11 +90,11 @@ class BusinessOutSchema(Schema):
 
     @staticmethod
     def resolve_created_at(obj):
-        # Converts datetime to clean string representation if needed
-        return obj.created_at.strftime("%Y-%m-%d %H:%M:%S") if hasattr(obj.created_at, 'strftime') else str(
-            obj.created_at)
+        return obj.created_at.strftime("%Y-%m-%d %H:%M:%S")
+
 
 class BusinessStatsOutSchema(Schema):
+
     total_bookings: int
     pending_bookings: int
     approved_bookings: int

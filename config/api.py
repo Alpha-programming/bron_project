@@ -12,7 +12,8 @@ from core.routes.blocked_date import router as blocked_date_router
 from core.routes.booking import router as booking_router
 from core.routes.reviews import router as reviews_router
 from core.routes.favorites import router as favorites_router
-
+from core.routes.business_gallery import router as business_gallery_router
+from core.routes.business_logo import router as business_logo_router
 
 api = NinjaAPI(
     title="Iron API",
@@ -67,6 +68,16 @@ api.add_router(
 api.add_router(
     "/bookings/",
     booking_router
+)
+
+api.add_router(
+    "/business-gallery/",
+    business_gallery_router
+)
+
+api.add_router(
+    "/businesses/",
+    business_logo_router
 )
 
 api.add_router("/reviews", reviews_router)
