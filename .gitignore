@@ -54,3 +54,9 @@ celerybeat-schedule
 
 # Redis dump
 dump.rdb
+# Production/local generated files
+.env
+venv/
+static/
+__pycache__/
+*.pyc

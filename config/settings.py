@@ -16,12 +16,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- SECURITY CONFIGURATION ---
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-hi8c4#3e_pf7u6yhhyq*+5u%$uxnuhfi7l$03k(+g_+6y2%n)1')
-
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    "bronofficial.com",
+    "www.bronofficial.com",
+    "127.0.0.1",
+    "localhost",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://bronofficial.com",
+    "https://www.bronofficial.com",
+]
 
 # --- AUTHENTICATION BACKENDS ---
 AUTHENTICATION_BACKENDS = [
@@ -216,3 +225,14 @@ SOCIALACCOUNT_PROVIDERS = {
 # --- DEVELOPMENT OUTBOUND MAIL ROUTER ---
 # Prints confirmation codes directly out to the terminal console screen
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# --- PRODUCTION HTTPS SECURITY ---
+SECURE_SSL_REDIRECT = True
+
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+SECURE_HSTS_SECONDS = 3600
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = False
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
