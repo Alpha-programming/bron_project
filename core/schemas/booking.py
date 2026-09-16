@@ -1,5 +1,5 @@
 from ninja import Schema
-from datetime import date, time
+from datetime import date, time, datetime
 from typing import Optional, List
 
 class BookingCreateSchema(Schema):
@@ -30,6 +30,8 @@ class BookingOutSchema(Schema):
     guest_count: int
     total_price: float
     status: str
+    attendance_status: str
+    extra_wait_minutes: int
 
 class BookingListSchema(Schema):
     id: int
@@ -37,3 +39,7 @@ class BookingListSchema(Schema):
     start_time: time
     status: str
     total_price: float
+
+class BookingAttendanceSchema(Schema):
+    status: str
+    extra_wait_minutes: int = 0

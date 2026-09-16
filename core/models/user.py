@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-
+from django.db.models import Avg
 
 class User(AbstractUser):
 
@@ -46,6 +46,22 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
 
     REQUIRED_FIELDS = ["email"]
+
+    @property
+    def rating(self):
+        result = self.received_reviews.filter(
+            review_type="customer"
+        ).aggregate(
+            average=Avg("rating")
+        )
+
+        return round(result["average"] or 0, 1)
+
+    @property
+    def reviews_count(self):
+        return self.received_reviews.filter(
+            review_type="customer"
+        ).count()
 
     def __str__(self):
         return self.username

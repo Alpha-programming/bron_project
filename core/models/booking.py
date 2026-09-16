@@ -14,7 +14,17 @@ class Booking(models.Model):
         ("confirmed", "Confirmed"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
+        ("rejected", "Rejected"),
     )
+
+    ATTENDANCE_STATUS_CHOICES = (
+        ("not_set", "Not Set"),
+        ("visited", "Visited"),
+        ("late", "Late"),
+        ("no_show", "No Show"),
+    )
+
+
 
     user = models.ForeignKey(
         User,
@@ -61,6 +71,21 @@ class Booking(models.Model):
         max_length=20,
         choices=STATUS_CHOICES,
         default="pending"
+    )
+
+    attendance_status = models.CharField(
+        max_length=20,
+        choices=ATTENDANCE_STATUS_CHOICES,
+        default="not_set"
+    )
+
+    extra_wait_minutes = models.PositiveSmallIntegerField(
+        default=0
+    )
+
+    attendance_updated_at = models.DateTimeField(
+        null=True,
+        blank=True
     )
 
     guest_count = models.PositiveIntegerField(

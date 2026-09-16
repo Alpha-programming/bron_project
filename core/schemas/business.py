@@ -5,7 +5,7 @@ from typing import Optional
 class BusinessCreateSchema(Schema):
 
     name: str
-    description: Optional[str] = None
+    description: str = ""
 
     category: str
 
@@ -15,10 +15,12 @@ class BusinessCreateSchema(Schema):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-    tin: Optional[str] = None
-    website: Optional[str] = None
+    tin: str = ""
+    website: str = ""
+
     social_links: dict = {}
-    comments: Optional[str] = None
+
+    comments: str = ""
 
 
 class BusinessUpdateSchema(Schema):

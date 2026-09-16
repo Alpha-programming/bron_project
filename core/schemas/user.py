@@ -13,7 +13,8 @@ class UserProfileOutSchema(Schema):
     role: str
     language: str
     is_verified: bool
-
+    rating: float
+    reviews_count: int
 
 class UserProfileUpdateSchema(Schema):
 

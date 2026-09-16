@@ -32,33 +32,50 @@ def get_business_by_id(
         )
 
 
-def create_business(
-    user,
-    data
-):
+def create_business(user, data):
+
+    values = data.model_dump()
+
+    # These model fields use blank=True but NOT null=True,
+    # so PostgreSQL must receive "" instead of None.
+    values["description"] = values.get("description") or ""
+    values["tin"] = values.get("tin") or ""
+    values["website"] = values.get("website") or ""
+    values["comments"] = values.get("comments") or ""
+
+    # JSONField should receive a dictionary, not None.
+    values["social_links"] = values.get("social_links") or {}
 
     return Business.objects.create(
         owner=user,
-        **data.model_dump()
+        **values
     )
 
 
-def update_business(
-    user,
-    business,
-    data
-):
+def update_business(user, business, data):
 
     if business.owner != user:
-
         raise HttpError(
             403,
             "Permission denied"
         )
 
-    for field, value in data.model_dump(
-        exclude_unset=True
-    ).items():
+    values = data.model_dump(exclude_unset=True)
+
+    non_nullable_text_fields = {
+        "description",
+        "tin",
+        "website",
+        "comments",
+    }
+
+    for field, value in values.items():
+
+        if field in non_nullable_text_fields and value is None:
+            value = ""
+
+        if field == "social_links" and value is None:
+            value = {}
 
         setattr(
             business,

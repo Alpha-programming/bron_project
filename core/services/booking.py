@@ -1,6 +1,7 @@
 from decimal import Decimal
 from datetime import datetime, date
 from ninja.errors import HttpError
+from django.utils import timezone
 
 from core.models import (
     Booking,
@@ -221,7 +222,7 @@ def calculate_available_slots(business_id: int, staff_id: int, target_date: date
     existing_bookings = Booking.objects.filter(
         staff_id=staff_id,
         booking_date=target_date,
-        status__in=['PENDING', 'APPROVED', 'CONFIRMED']
+        status__in=["pending", "confirmed"]
     ).values_list('start_time', 'end_time')
 
     while current_time + interval <= terminal_time:
@@ -241,3 +242,79 @@ def calculate_available_slots(business_id: int, staff_id: int, target_date: date
         current_time += interval
 
     return slots
+
+def update_booking_attendance(
+    user,
+    booking_id: int,
+    status: str,
+    extra_wait_minutes: int = 0
+):
+    allowed_statuses = {
+        "visited",
+        "late",
+        "no_show",
+    }
+
+    if status not in allowed_statuses:
+        raise HttpError(
+            400,
+            "Status must be visited, late or no_show."
+        )
+
+    try:
+        booking = Booking.objects.select_related(
+            "business",
+            "user"
+        ).get(id=booking_id)
+    except Booking.DoesNotExist:
+        raise HttpError(404, "Booking not found.")
+
+    # Only this organization's owner can control attendance
+    if booking.business.owner_id != user.id:
+        raise HttpError(
+            403,
+            "Only the business owner can update attendance."
+        )
+
+    # Booking must first be accepted
+    if booking.status != "confirmed":
+        raise HttpError(
+            400,
+            "Booking must be confirmed first."
+        )
+
+    if status == "late":
+        if extra_wait_minutes < 0:
+            raise HttpError(
+                400,
+                "Extra wait minutes cannot be negative."
+            )
+
+        # Requirement currently mentions 10 minutes.
+        if extra_wait_minutes > 10:
+            raise HttpError(
+                400,
+                "Maximum extra waiting time is 10 minutes."
+            )
+
+    else:
+        extra_wait_minutes = 0
+
+    booking.attendance_status = status
+    booking.extra_wait_minutes = extra_wait_minutes
+    booking.attendance_updated_at = timezone.now()
+
+    # Visited means appointment was completed.
+    if status == "visited":
+        booking.status = "completed"
+
+    booking.save(
+        update_fields=[
+            "attendance_status",
+            "extra_wait_minutes",
+            "attendance_updated_at",
+            "status",
+        ]
+    )
+
+    return booking
