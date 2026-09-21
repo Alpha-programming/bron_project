@@ -9,7 +9,7 @@ def get_all_businesses():
 
     return Business.objects.select_related(
         "owner"
-    ).all()
+    ).filter(is_active=True)
 
 
 def get_business_by_id(

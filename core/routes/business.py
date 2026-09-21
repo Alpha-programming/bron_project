@@ -31,8 +31,8 @@ def search_businesses(request, q: str):
     Search businesses by name, description, or address match.
     """
     if not q:
-        return Business.objects.all()
-    return Business.objects.filter(name__icontains=q) | Business.objects.filter(description__icontains=q)
+        return Business.objects.filter(is_active=True)
+    return Business.objects.filter(is_active=True, name__icontains=q) | Business.objects.filter(is_active=True, description__icontains=q)
 
 
 # --- FIXED: MOVED UP ABOVE THE DYNAMIC ID PARAMETER ---
@@ -41,7 +41,7 @@ def filter_businesses_by_category(request, category: str):
     """
     Filter operational venues based on industry categories.
     """
-    return Business.objects.filter(category__iexact=category)
+    return Business.objects.filter(is_active=True, category__iexact=category)
 
 
 @router.get("/{business_id}", response=BusinessOutSchema)
