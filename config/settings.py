@@ -226,10 +226,13 @@ SOCIALACCOUNT_PROVIDERS = {
 # Prints confirmation codes directly out to the terminal console screen
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # --- PRODUCTION HTTPS SECURITY ---
-SECURE_SSL_REDIRECT = True
+# Set DJANGO_SECURE_SSL=False in a local .env to run over plain http
+SECURE_SSL = os.getenv('DJANGO_SECURE_SSL', 'True') == 'True'
 
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SECURE_SSL_REDIRECT = SECURE_SSL
+
+SESSION_COOKIE_SECURE = SECURE_SSL
+CSRF_COOKIE_SECURE = SECURE_SSL
 
 SECURE_HSTS_SECONDS = 3600
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
