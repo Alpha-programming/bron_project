@@ -26,6 +26,12 @@ class Service(models.Model):
         help_text="minutes"
     )
 
+    # How many guests can be booked into the same time slot
+    capacity = models.PositiveIntegerField(
+        default=1,
+        help_text="guests per time slot"
+    )
+
     price = models.DecimalField(
         max_digits=10,
         decimal_places=2
