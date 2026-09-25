@@ -15,6 +15,7 @@ from core.models import (
 )
 from core.services.notification import notify
 from core.services.service import booked_guests
+from core.utils.helpers import working_day_bounds
 
 
 def _parse_time(value):
@@ -442,8 +443,7 @@ def calculate_available_slots(business_id: int, staff_id: int, target_date: date
     end_time = schedule.close_time
 
     slots = []
-    current_time = datetime.combine(target_date, start_time)
-    terminal_time = datetime.combine(target_date, end_time)
+    current_time, terminal_time = working_day_bounds(target_date, start_time, end_time)
     interval = timedelta(minutes=30)
 
     # 3. Pull concurrent booked targets

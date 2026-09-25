@@ -5,6 +5,7 @@ from django.utils import timezone
 from ninja.errors import HttpError
 
 from core.models import BlockedDate, Booking, Business, Service, Staff, WorkingHours
+from core.utils.helpers import working_day_bounds
 from core.utils.validators import validate_image
 
 # Bookings in these statuses occupy places in a slot
@@ -115,8 +116,7 @@ def _build_slots(service, day, hours, bookings, now):
         return []
 
     step = timedelta(minutes=service.duration)
-    current = datetime.combine(day, hours.open_time)
-    closing = datetime.combine(day, hours.close_time)
+    current, closing = working_day_bounds(day, hours.open_time, hours.close_time)
 
     slots = []
     while current + step <= closing:
