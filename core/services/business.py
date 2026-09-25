@@ -46,8 +46,8 @@ def create_business(user, data):
     values["website"] = values.get("website") or ""
     values["comments"] = values.get("comments") or ""
 
-    # JSONField should receive a dictionary, not None.
-    values["social_links"] = values.get("social_links") or {}
+    # Store only the networks that were actually provided
+    values["social_links"] = data.social_links.model_dump(exclude_none=True)
 
     values["category"] = get_category_by_id(values.pop("category_id"))
 
@@ -77,6 +77,8 @@ def update_business(user, business, data):
         "tin",
         "website",
         "comments",
+        "email",
+        "owner_name",
     }
 
     for field, value in values.items():
@@ -84,8 +86,9 @@ def update_business(user, business, data):
         if field in non_nullable_text_fields and value is None:
             value = ""
 
-        if field == "social_links" and value is None:
-            value = {}
+        if field == "social_links":
+            # Replace the whole set; None clears it
+            value = data.social_links.model_dump(exclude_none=True) if data.social_links else {}
 
         setattr(
             business,

@@ -31,6 +31,14 @@ class Business(models.Model):
 
     phone = models.CharField(max_length=20)
 
+    email = models.EmailField(blank=True)
+
+    # Contact person submitted with the application
+    owner_name = models.CharField(
+        max_length=150,
+        blank=True
+    )
+
     latitude = models.FloatField(
         null=True,
         blank=True

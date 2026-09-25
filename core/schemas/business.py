@@ -1,8 +1,48 @@
 from ninja import Schema
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from pydantic import Field, field_validator
 from typing import Optional
 
 from core.schemas.category import CategoryShortSchema
 from core.utils.helpers import absolute_media_url
+
+
+class SocialLinksSchema(Schema):
+    """
+    Fixed set of social profiles. Empty strings are treated as "not set";
+    anything else must be a full http(s) URL.
+    """
+
+    instagram: Optional[str] = None
+    telegram: Optional[str] = None
+    facebook: Optional[str] = None
+    tiktok: Optional[str] = None
+    youtube: Optional[str] = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def validate_url(cls, value, info):
+        if value is None:
+            return None
+        value = str(value).strip()
+        if not value:
+            return None
+        if not value.startswith(("http://", "https://")):
+            raise ValueError(f"{info.field_name} must be a full URL starting with http:// or https://")
+        return value
+
+
+def _check_email(value):
+    """Reuse Django's EmailField validation so API and admin agree."""
+    if value is None:
+        return None
+    value = value.strip()
+    try:
+        validate_email(value)
+    except ValidationError:
+        raise ValueError("Enter a valid email address")
+    return value
 
 
 class BusinessCreateSchema(Schema):
@@ -14,6 +54,13 @@ class BusinessCreateSchema(Schema):
 
     address: str
     phone: str
+    email: str
+    owner_name: str = Field(..., min_length=1, max_length=150)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_field(cls, value):
+        return _check_email(value)
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -21,7 +68,7 @@ class BusinessCreateSchema(Schema):
     tin: str = ""
     website: str = ""
 
-    social_links: dict = {}
+    social_links: SocialLinksSchema = SocialLinksSchema()
 
     comments: str = ""
 
@@ -35,13 +82,20 @@ class BusinessUpdateSchema(Schema):
 
     address: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[str] = None
+    owner_name: Optional[str] = Field(None, max_length=150)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_field(cls, value):
+        return _check_email(value)
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
     tin: Optional[str] = None
     website: Optional[str] = None
-    social_links: Optional[dict] = None
+    social_links: Optional[SocialLinksSchema] = None
     comments: Optional[str] = None
 
 
@@ -78,16 +132,23 @@ class BusinessOutSchema(Schema):
 
     address: str
     phone: str
+    email: str
+    owner_name: str
 
     latitude: float | None = None
     longitude: float | None = None
 
     tin: str | None = None
     website: str | None = None
-    social_links: dict
+    social_links: SocialLinksSchema
     comments: str | None = None
 
     created_at: str
+
+    @staticmethod
+    def resolve_social_links(obj):
+        # Always return every key so the frontend gets null for unset networks
+        return SocialLinksSchema(**(obj.social_links or {}))
 
     @staticmethod
     def resolve_logo(obj, context):
