@@ -1,5 +1,6 @@
 from django.db import models
 from .user import User
+from .category import Category
 
 
 class Business(models.Model):
@@ -20,16 +21,10 @@ class Business(models.Model):
         blank=True
     )
 
-    CATEGORY_CHOICES = (
-        ("gym", "Gym"),
-        ("spa", "Spa"),
-        ("salon", "Salon"),
-        ("clinic", "Clinic"),
-    )
-
-    category = models.CharField(
-        max_length=50,
-        choices=CATEGORY_CHOICES
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="businesses"
     )
 
     address = models.CharField(max_length=255)

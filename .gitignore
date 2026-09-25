@@ -22,10 +22,6 @@ staticfiles/
 # macOS
 .DS_Store
 
-# Migrations
-**/migrations/*.py
-!**/migrations/__init__.py
-
 # Environment Variables
 .env.local
 .env.production

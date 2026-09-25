@@ -1,13 +1,16 @@
 from ninja import Schema
 from typing import Optional
 
+from core.schemas.category import CategoryShortSchema
+from core.utils.helpers import absolute_media_url
+
 
 class BusinessCreateSchema(Schema):
 
     name: str
     description: str = ""
 
-    category: str
+    category_id: int
 
     address: str
     phone: str
@@ -28,7 +31,7 @@ class BusinessUpdateSchema(Schema):
     name: Optional[str] = None
     description: Optional[str] = None
 
-    category: Optional[str] = None
+    category_id: Optional[int] = None
 
     address: Optional[str] = None
     phone: Optional[str] = None
@@ -47,12 +50,16 @@ class BusinessListSchema(Schema):
     id: int
 
     name: str
-    category: str
+    category: CategoryShortSchema
 
     address: str
     phone: str
 
     logo: str | None
+
+    @staticmethod
+    def resolve_logo(obj, context):
+        return absolute_media_url(context["request"], obj.logo)
 
 
 class BusinessOutSchema(Schema):
@@ -67,7 +74,7 @@ class BusinessOutSchema(Schema):
 
     logo: str | None
 
-    category: str
+    category: CategoryShortSchema
 
     address: str
     phone: str
@@ -81,6 +88,10 @@ class BusinessOutSchema(Schema):
     comments: str | None = None
 
     created_at: str
+
+    @staticmethod
+    def resolve_logo(obj, context):
+        return absolute_media_url(context["request"], obj.logo)
 
     @staticmethod
     def resolve_owner_id(obj):

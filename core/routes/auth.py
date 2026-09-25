@@ -10,11 +10,9 @@ router = Router(tags=["Authentication"])
 
 @router.post("/register")
 def register(request, payload: RegisterSchema):
-    try:
-        user = register_user(payload)
-        return {"message": "User created successfully", "user_id": user.id}
-    except HttpError as e:
-        return {"message": "User already registered, proceeding to login.", "user_id": None}
+    # Validation errors (taken username/email/phone) propagate as 400 with a detail message
+    user = register_user(payload)
+    return {"message": "User created successfully", "user_id": user.id}
 
 
 @router.post("/login", response=LoginResponseSchema)
@@ -34,9 +32,5 @@ def me(request):
             user = User.objects.get(id=user_id)
         else:
             raise HttpError(401, "Invalid or unreadable authentication token identity.")
-
-    # 3. Apply default role fallback if missing
-    if not getattr(user, 'role', None):
-        user.role = "client"
 
     return user

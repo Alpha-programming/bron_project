@@ -4,6 +4,7 @@ from django.utils import timezone
 from ninja.errors import HttpError
 from core.models import User, TelegramLinkToken
 from django.contrib.auth import update_session_auth_hash
+from core.utils.validators import validate_image
 
 def create_tg_token(user) -> str:
     """
@@ -48,6 +49,29 @@ def update_profile(user: User, data) -> User:
         setattr(user, field, value)
 
     user.save()
+    return user
+
+
+def upload_avatar(user: User, image) -> User:
+    """
+    Replaces the user's avatar, removing the previous file from storage.
+    """
+    validate_image(image)
+
+    if user.avatar:
+        user.avatar.delete(save=False)
+
+    user.avatar = image
+    user.save(update_fields=["avatar"])
+    return user
+
+
+def delete_avatar(user: User) -> User:
+    if user.avatar:
+        user.avatar.delete(save=False)
+
+    user.avatar = None
+    user.save(update_fields=["avatar"])
     return user
 
 

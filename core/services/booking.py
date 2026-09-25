@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import datetime, date
+from datetime import datetime, date, time
 from ninja.errors import HttpError
 from django.utils import timezone
 
@@ -12,6 +12,31 @@ from core.models import (
     Product,
     BlockedDate,
 )
+from core.services.notification import notify
+
+
+def _parse_time(value):
+    """
+    Booking schema sends times as "HH:MM" strings; normalise to time objects
+    so validation errors surface as 400 instead of a database error.
+    """
+    if isinstance(value, time):
+        return value
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).time()
+        except (TypeError, ValueError):
+            continue
+    raise HttpError(400, "Time must be in HH:MM format")
+
+
+def _can_view_booking(user, booking):
+    return (
+        booking.user_id == user.id
+        or booking.business.owner_id == user.id
+        or user.is_staff
+    )
+
 
 def create_booking(
     user,
@@ -20,23 +45,33 @@ def create_booking(
 
     try:
 
-        business = Business.objects.get(
+        business = Business.objects.select_related("owner").get(
             id=data.business_id
         )
 
+        # Service and branch must belong to the same business
         service = Service.objects.get(
-            id=data.service_id
+            id=data.service_id,
+            business=business,
         )
 
         branch = Branch.objects.get(
-            id=data.branch_id
+            id=data.branch_id,
+            business=business,
         )
 
-    except Exception:
+    except (Business.DoesNotExist, Service.DoesNotExist, Branch.DoesNotExist):
 
         raise HttpError(
             404,
             "Business, service or branch not found"
+        )
+
+    if not business.is_active:
+
+        raise HttpError(
+            400,
+            "Business is not accepting bookings yet"
         )
 
     blocked = BlockedDate.objects.filter(
@@ -58,7 +93,8 @@ def create_booking(
         try:
 
             staff = Staff.objects.get(
-                id=data.staff_id
+                id=data.staff_id,
+                business=business,
             )
 
         except Staff.DoesNotExist:
@@ -68,6 +104,16 @@ def create_booking(
                 "Staff not found"
             )
 
+    start_time = _parse_time(data.start_time)
+    end_time = _parse_time(data.end_time)
+
+    if end_time <= start_time:
+
+        raise HttpError(
+            400,
+            "end_time must be after start_time"
+        )
+
     booking = Booking.objects.create(
         user=user,
         business=business,
@@ -75,8 +121,8 @@ def create_booking(
         branch=branch,
         staff=staff,
         booking_date=data.booking_date,
-        start_time=data.start_time,
-        end_time=data.end_time,
+        start_time=start_time,
+        end_time=end_time,
         guest_count=data.guest_count,
         total_price=service.price,
     )
@@ -88,7 +134,8 @@ def create_booking(
     if data.product_ids:
 
         products = Product.objects.filter(
-            id__in=data.product_ids
+            id__in=data.product_ids,
+            business=business,
         )
 
         booking.products.set(
@@ -102,7 +149,137 @@ def create_booking(
     booking.total_price = total_price
     booking.save()
 
+    notify(
+        business.owner,
+        "booking_created",
+        "New booking",
+        f"{user.username} booked {service.title} on {booking.booking_date} at {booking.start_time:%H:%M}",
+        booking=booking,
+    )
+
     return booking
+
+
+def get_booking_for_user(user, booking_id):
+    """
+    Booking visible only to its customer, the business owner or platform staff.
+    """
+    booking = get_booking(booking_id)
+
+    if not _can_view_booking(user, booking):
+        raise HttpError(403, "Permission denied")
+
+    return booking
+
+
+def get_business_bookings(user, business_id):
+    try:
+        business = Business.objects.get(id=business_id)
+    except Business.DoesNotExist:
+        raise HttpError(404, "Business not found")
+
+    if business.owner_id != user.id and not user.is_staff:
+        raise HttpError(403, "Permission denied")
+
+    return Booking.objects.filter(
+        business=business
+    ).select_related("user", "service", "business", "branch", "staff")
+
+
+def get_staff_bookings(user, staff_id):
+    try:
+        staff = Staff.objects.select_related("business").get(id=staff_id)
+    except Staff.DoesNotExist:
+        raise HttpError(404, "Staff not found")
+
+    if staff.business.owner_id != user.id and not user.is_staff:
+        raise HttpError(403, "Permission denied")
+
+    return Booking.objects.filter(
+        staff=staff
+    ).select_related("user", "service", "business", "branch", "staff")
+
+
+def approve_booking(user, booking):
+    if booking.business.owner_id != user.id:
+        raise HttpError(403, "Only the business owner can approve this booking.")
+
+    if booking.status != "pending":
+        raise HttpError(400, "Only pending bookings can be approved.")
+
+    booking.status = "confirmed"
+    booking.save(update_fields=["status"])
+
+    notify(
+        booking.user,
+        "booking_confirmed",
+        "Booking confirmed",
+        f"{booking.business.name} confirmed your booking on {booking.booking_date} at {booking.start_time:%H:%M}",
+        booking=booking,
+    )
+
+    return booking
+
+
+def reject_booking(user, booking):
+    if booking.business.owner_id != user.id:
+        raise HttpError(403, "Only the business owner can reject this booking.")
+
+    if booking.status != "pending":
+        raise HttpError(400, "Only pending bookings can be rejected.")
+
+    booking.status = "rejected"
+    booking.save(update_fields=["status"])
+
+    notify(
+        booking.user,
+        "booking_rejected",
+        "Booking rejected",
+        f"{booking.business.name} rejected your booking on {booking.booking_date} at {booking.start_time:%H:%M}",
+        booking=booking,
+    )
+
+    return booking
+
+
+def cancel_booking(user, booking):
+    is_customer = booking.user_id == user.id
+    is_owner = booking.business.owner_id == user.id
+
+    if not (is_customer or is_owner or user.is_staff):
+        raise HttpError(403, "Permission denied.")
+
+    if booking.status in ("completed", "cancelled", "rejected"):
+        raise HttpError(
+            400,
+            f"Booking with status '{booking.status}' cannot be cancelled."
+        )
+
+    booking.status = "cancelled"
+    booking.save(update_fields=["status"])
+
+    when = f"{booking.booking_date} at {booking.start_time:%H:%M}"
+
+    # Tell the other side who cancelled
+    if is_customer:
+        notify(
+            booking.business.owner,
+            "booking_cancelled",
+            "Booking cancelled",
+            f"{booking.user.username} cancelled the booking on {when}",
+            booking=booking,
+        )
+    else:
+        notify(
+            booking.user,
+            "booking_cancelled",
+            "Booking cancelled",
+            f"{booking.business.name} cancelled your booking on {when}",
+            booking=booking,
+        )
+
+    return booking
+
 
 def get_booking(
     booking_id
@@ -114,6 +291,7 @@ def get_booking(
             "user",
             "service",
             "business",
+            "business__owner",
             "branch",
             "staff",
         ).get(
@@ -150,16 +328,20 @@ def update_booking(
             "Permission denied"
         )
 
-    if data.status is not None:
+    if booking.status != "pending":
 
-        booking.status = data.status
+        raise HttpError(
+            400,
+            "Only pending bookings can be changed"
+        )
 
     if data.staff_id is not None:
 
         try:
 
             booking.staff = Staff.objects.get(
-                id=data.staff_id
+                id=data.staff_id,
+                business=booking.business,
             )
 
         except Staff.DoesNotExist:

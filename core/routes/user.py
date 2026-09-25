@@ -1,4 +1,5 @@
-from ninja import Router
+from ninja import Router, File
+from ninja.files import UploadedFile
 from core.security import JWTAuth, TelegramBotAuth
 from core.schemas.user import (
     UserProfileOutSchema,
@@ -10,6 +11,8 @@ from core.schemas.auth import LoginResponseSchema
 from core.services.user import (
     update_profile,
     create_tg_token,
+    upload_avatar,
+    delete_avatar,
     change_user_password,  # New
     execute_profile_deletion  # New
 )
@@ -34,6 +37,16 @@ def update_user_profile(request, payload: UserProfileUpdateSchema):
     if not user or hasattr(user, '_wrapped'):
         user = User.objects.get(id=request.user.id)
     return update_profile(user, payload)
+
+
+@router.post("/profile/avatar", auth=JWTAuth(), response=UserProfileOutSchema)
+def upload_user_avatar(request, image: UploadedFile = File(...)):
+    return upload_avatar(request.auth, image)
+
+
+@router.delete("/profile/avatar", auth=JWTAuth(), response=UserProfileOutSchema)
+def delete_user_avatar(request):
+    return delete_avatar(request.auth)
 
 
 @router.post("/telegram/connect", auth=TelegramBotAuth(), response=LoginResponseSchema)

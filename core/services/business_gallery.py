@@ -5,6 +5,10 @@ from core.models import (
     BusinessGallery,
 )
 
+from core.utils.validators import validate_image
+
+MAX_GALLERY_IMAGES = 20
+
 
 def upload_business_image(
     user,
@@ -30,6 +34,15 @@ def upload_business_image(
         raise HttpError(
             403,
             "Permission denied"
+        )
+
+    validate_image(image)
+
+    if business.gallery_images.count() >= MAX_GALLERY_IMAGES:
+
+        raise HttpError(
+            400,
+            f"Gallery is limited to {MAX_GALLERY_IMAGES} images"
         )
 
     return BusinessGallery.objects.create(
@@ -80,6 +93,10 @@ def delete_business_image(
             403,
             "Permission denied"
         )
+
+    image.image.delete(
+        save=False
+    )
 
     image.delete()
 

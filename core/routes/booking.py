@@ -18,9 +18,15 @@ from core.schemas.booking import (
 from core.services.booking import (
     create_booking,
     get_booking,
+    get_booking_for_user,
     get_user_bookings,
+    get_business_bookings as fetch_business_bookings,
+    get_staff_bookings as fetch_staff_bookings,
     update_booking,
     delete_booking,
+    approve_booking as approve,
+    reject_booking as reject,
+    cancel_booking as cancel,
     calculate_available_slots,
     update_booking_attendance,
 )
@@ -123,33 +129,10 @@ def get_business_bookings(
     Only the business owner can access them.
     """
 
-    user = request.auth
-
-    bookings = Booking.objects.filter(
-        business_id=business_id
-    ).select_related(
-        "user",
-        "service",
-        "business",
-        "branch",
-        "staff"
+    return fetch_business_bookings(
+        request.auth,
+        business_id
     )
-
-    # If business does not exist / no bookings,
-    # owner validation is handled using first booking when available.
-    first_booking = bookings.first()
-
-    if first_booking:
-        if (
-            first_booking.business.owner_id != user.id
-            and not user.is_staff
-        ):
-            raise HttpError(
-                403,
-                "Permission denied."
-            )
-
-    return bookings
 
 
 # ============================================================
@@ -167,16 +150,12 @@ def get_staff_bookings(
 ):
     """
     Get bookings assigned to a staff member.
+    Only the owner of the staff member's business can access them.
     """
 
-    return Booking.objects.filter(
-        staff_id=staff_id
-    ).select_related(
-        "user",
-        "service",
-        "business",
-        "branch",
-        "staff"
+    return fetch_staff_bookings(
+        request.auth,
+        staff_id
     )
 
 
@@ -187,6 +166,7 @@ def get_staff_bookings(
 
 @router.get(
     "/{booking_id}",
+    auth=JWTAuth(),
     response=BookingOutSchema
 )
 def booking_detail(
@@ -194,7 +174,8 @@ def booking_detail(
     booking_id: int
 ):
 
-    return get_booking(
+    return get_booking_for_user(
+        request.auth,
         booking_id
     )
 
@@ -276,29 +257,10 @@ def approve_booking(
     booking_id: int
 ):
 
-    booking = get_booking(
-        booking_id
+    return approve(
+        request.auth,
+        get_booking(booking_id)
     )
-
-    if booking.business.owner_id != request.auth.id:
-        raise HttpError(
-            403,
-            "Only the business owner can approve this booking."
-        )
-
-    if booking.status != "pending":
-        raise HttpError(
-            400,
-            "Only pending bookings can be approved."
-        )
-
-    booking.status = "confirmed"
-
-    booking.save(
-        update_fields=["status"]
-    )
-
-    return booking
 
 
 # ============================================================
@@ -315,29 +277,10 @@ def reject_booking(
     booking_id: int
 ):
 
-    booking = get_booking(
-        booking_id
+    return reject(
+        request.auth,
+        get_booking(booking_id)
     )
-
-    if booking.business.owner_id != request.auth.id:
-        raise HttpError(
-            403,
-            "Only the business owner can reject this booking."
-        )
-
-    if booking.status != "pending":
-        raise HttpError(
-            400,
-            "Only pending bookings can be rejected."
-        )
-
-    booking.status = "rejected"
-
-    booking.save(
-        update_fields=["status"]
-    )
-
-    return booking
 
 
 # ============================================================
@@ -354,46 +297,10 @@ def cancel_booking_view(
     booking_id: int
 ):
 
-    user = request.auth
-
-    if not user or hasattr(user, "_wrapped"):
-        user = User.objects.get(
-            id=request.user.id
-        )
-
-    booking = get_booking(
-        booking_id
+    return cancel(
+        request.auth,
+        get_booking(booking_id)
     )
-
-    # Customer who created booking OR
-    # business owner OR admin can cancel.
-    if (
-        booking.user_id != user.id
-        and booking.business.owner_id != user.id
-        and not user.is_staff
-    ):
-        raise HttpError(
-            403,
-            "Permission denied."
-        )
-
-    if booking.status in (
-        "completed",
-        "cancelled",
-        "rejected"
-    ):
-        raise HttpError(
-            400,
-            f"Booking with status '{booking.status}' cannot be cancelled."
-        )
-
-    booking.status = "cancelled"
-
-    booking.save(
-        update_fields=["status"]
-    )
-
-    return booking
 
 
 # ============================================================

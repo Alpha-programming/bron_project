@@ -1,3 +1,4 @@
+import os
 import requests
 import sys
 import uuid
@@ -9,7 +10,7 @@ from datetime import date, timedelta
 # ============================================================
 
 # LOCAL
-BASE_URL = "http://127.0.0.1:8001/api"
+BASE_URL = os.getenv("BRON_API_URL", "http://127.0.0.1:8001/api")
 
 # PRODUCTION — use later:
 # BASE_URL = "https://api.bronofficial.com/api"
@@ -472,7 +473,7 @@ def test_business():
     business_payload = {
         "name": f"BRON Test Business {RUN_ID}",
         "description": "Automated BRON integration testing business.",
-        "category": "gym",
+        "category_id": 1,
         "address": "Tashkent",
         "phone": f"+99893{RUN_ID[:7]}",
         "tin": "",
@@ -874,6 +875,7 @@ def test_staff():
         request(
             "GET",
             f"/staff/{STAFF_ID}/bookings",
+            headers=OWNER_HEADERS,
             expected=(200,),
             name="Staff bookings",
         )
@@ -1048,6 +1050,36 @@ def test_blocked_dates():
 # STEP 10 — BOOKINGS
 # ============================================================
 
+def activate_business_locally():
+    """
+    New businesses need admin approval (is_active=True) before they accept
+    bookings. There is no API for that, so when testing against a local server
+    we flip the flag through manage.py.
+    """
+    if "127.0.0.1" not in BASE_URL and "localhost" not in BASE_URL:
+        return False
+
+    manage = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manage.py")
+
+    if not os.path.exists(manage):
+        return False
+
+    import subprocess
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            manage,
+            "shell",
+            "-c",
+            f"from core.models import Business; Business.objects.filter(id={BUSINESS_ID}).update(is_active=True)",
+        ],
+        capture_output=True,
+    )
+
+    return result.returncode == 0
+
+
 def test_booking():
 
     global BOOKING_ID
@@ -1063,6 +1095,15 @@ def test_booking():
         skip_test(
             "Booking tests",
             "Required related objects missing"
+        )
+
+        return False
+
+    if not activate_business_locally():
+
+        skip_test(
+            "Booking tests",
+            "Business must be approved in admin (is_active=True) before booking"
         )
 
         return False
@@ -1127,6 +1168,7 @@ def test_booking():
     request(
         "GET",
         f"/bookings/{BOOKING_ID}",
+        headers=CUSTOMER_HEADERS,
         expected=(200,),
         name="Booking detail",
     )

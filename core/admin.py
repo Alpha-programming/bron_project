@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from core.models import (
     User,
+    Category,
     Business,
     Service,
     Booking,
@@ -48,6 +49,25 @@ class UserAdmin(admin.ModelAdmin):
     )
 
     ordering = ("-created_at",)
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "slug",
+        "order",
+        "is_active",
+    )
+
+    list_filter = ("is_active",)
+
+    search_fields = ("name", "slug")
+
+    prepopulated_fields = {"slug": ("name",)}
+
+    ordering = ("order", "name")
 
 
 @admin.register(Business)
@@ -180,12 +200,15 @@ class NotificationAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "user",
+        "notification_type",
         "title",
+        "booking",
         "is_read",
         "created_at",
     )
 
     list_filter = (
+        "notification_type",
         "is_read",
     )
 
