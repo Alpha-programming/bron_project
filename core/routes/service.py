@@ -1,4 +1,7 @@
-from ninja import Router
+from datetime import date
+
+from ninja import Router, File
+from ninja.files import UploadedFile
 from core.security import JWTAuth
 from core.models import User, Service
 from core.schemas.service import (
@@ -6,6 +9,8 @@ from core.schemas.service import (
     ServiceUpdateSchema,
     ServiceOutSchema,
     ServiceListSchema,
+    ServiceAvailabilityOutSchema,
+    ServiceAvailableDateSchema,
 )
 from core.services.service import (
     create_service,
@@ -15,8 +20,12 @@ from core.services.service import (
     update_service,
     delete_service,
     get_distinct_service_categories,
+    upload_service_image,
+    delete_service_image,
+    get_service_availability,
+    get_service_available_dates,
 )
-from typing import List
+from typing import List, Optional
 
 router = Router(tags=["Services"])
 
@@ -54,6 +63,33 @@ def search_services(request, q: str):
 @router.get("/business/{business_id}", response=list[ServiceListSchema])
 def business_services(request, business_id: int):
     return get_business_services(business_id)
+
+
+@router.get("/{service_id}/availability", response=ServiceAvailabilityOutSchema)
+def service_availability(request, service_id: int, date: date, staff_id: Optional[int] = None):
+    """
+    Time slots for one day with the number of free places in each.
+    Based on the business working hours, blocked dates and existing bookings.
+    """
+    return get_service_availability(get_service(service_id), date, staff_id)
+
+
+@router.get("/{service_id}/available-dates", response=List[ServiceAvailableDateSchema])
+def service_available_dates(request, service_id: int, days: int = 14, staff_id: Optional[int] = None):
+    """
+    Dates (from today, up to `days` ahead) that have at least one free slot.
+    """
+    return get_service_available_dates(get_service(service_id), days, staff_id)
+
+
+@router.post("/{service_id}/image", auth=JWTAuth(), response=ServiceOutSchema)
+def upload_image(request, service_id: int, image: UploadedFile = File(...)):
+    return upload_service_image(request.auth, get_service(service_id), image)
+
+
+@router.delete("/{service_id}/image", auth=JWTAuth(), response=ServiceOutSchema)
+def remove_image(request, service_id: int):
+    return delete_service_image(request.auth, get_service(service_id))
 
 
 @router.get("/{service_id}", response=ServiceOutSchema)

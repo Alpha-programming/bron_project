@@ -19,6 +19,7 @@
 | `GET /api/businesses/{id}/stats`, `/analytics` | только владелец бизнеса (иначе 403) |
 | `POST /api/auth/register` при занятом username/email/phone отвечал 200 с `user_id: null` | отвечает **400** с `{"detail": "Email already exists"}` |
 | `POST /api/businesses/create`: полей `email` и `owner_name` не было | **обязательны** (422 без них) |
+| `GET /api/bookings/available-slots` всегда отдавал 09:00–18:00 | берёт реальные часы работы бизнеса; выходной день → пустой список |
 | `social_links` — произвольный словарь | только ключи `instagram`, `telegram`, `facebook`, `tiktok`, `youtube`; значение — полный URL с `http(s)://` |
 
 ---
@@ -258,6 +259,69 @@ Push/Telegram-рассылки пока нет — фронт опрашивае
 
 ---
 
+## Услуги: фото, вместимость, свободное время
+
+### Вместимость (`capacity`)
+
+`capacity` — сколько гостей может быть записано **в один и тот же слот одновременно** (например, групповая тренировка на 10 человек). По умолчанию `1` — обычная индивидуальная услуга.
+
+```bash
+curl -X POST https://bronofficial.com/api/services/create \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"business_id": 2, "title": "Group Yoga", "description": "...", "category": "yoga",
+       "duration": 60, "price": "30000", "capacity": 10}'
+```
+
+- `capacity`: от 1 до 1000; `duration` (минуты) — от 1. Меняется через `PUT /api/services/{id}`.
+- `capacity` и `image` приходят во всех ответах услуг: `GET /api/services/`, `/{id}`, `/business/{id}`, `/search`.
+
+### Фото услуги
+
+```
+POST   /api/services/{service_id}/image   (auth, владелец)  multipart, поле image
+DELETE /api/services/{service_id}/image   (auth, владелец)
+```
+Правила те же, что для остальных картинок: JPEG/PNG/WEBP, до 5 МБ. Ответ — объект услуги с `"image": "https://bronofficial.com/media/services/..."` (после удаления `null`).
+
+### Свободное время на дату
+
+```
+GET /api/services/{service_id}/availability?date=2026-10-01[&staff_id=5]
+```
+
+```json
+{
+  "service_id": 7,
+  "date": "2026-10-01",
+  "duration": 60,
+  "capacity": 3,
+  "slots": [
+    {"start_time": "10:00", "end_time": "11:00", "available_spots": 0, "is_available": false},
+    {"start_time": "11:00", "end_time": "12:00", "available_spots": 3, "is_available": true}
+  ]
+}
+```
+
+- Слоты идут с шагом `duration` услуги в пределах часов работы бизнеса (`/api/working-hours/`) на этот день недели.
+- `available_spots` = `capacity` − гости в активных бронях (`pending`, `confirmed`), пересекающихся со слотом.
+- Занятые слоты тоже приходят (`is_available: false`) — их можно показать серыми.
+- Пустой `slots`: бизнес в этот день не работает, дата заблокирована (`/api/blocked-dates/`), дата в прошлом. На сегодня уже начавшиеся слоты не отдаются.
+- `staff_id` — опционально, считать брони только этого сотрудника. Сотрудник другого бизнеса → `404`.
+
+Для записи используйте `start_time`/`end_time` слота в `POST /api/bookings/create`.
+
+### Доступные даты (для календаря)
+
+```
+GET /api/services/{service_id}/available-dates?days=14[&staff_id=5]
+```
+```json
+[{"date": "2026-09-26", "free_slots": 2}, {"date": "2026-09-27", "free_slots": 2}, {"date": "2026-09-29", "free_slots": 1}]
+```
+Даты начиная с сегодня, где есть хотя бы один свободный слот. `days` — от 1 до 60 (по умолчанию 14), иначе `400`.
+
+---
+
 ## Бронирования — новые проверки
 
 `POST /api/bookings/create` теперь возвращает:
@@ -265,6 +329,8 @@ Push/Telegram-рассылки пока нет — фронт опрашивае
 - `404 "Business, service or branch not found"` — `service_id` / `branch_id` принадлежат другому бизнесу
 - `404 "Staff not found"` — сотрудник другого бизнеса
 - `400 "end_time must be after start_time"`, `400 "Time must be in HH:MM format"`
+- `400 "This service allows at most N guests per slot"` — `guest_count` больше вместимости услуги
+- `400 "Only N places left for this time"` — в выбранное время не хватает свободных мест
 - товары (`product_ids`) чужого бизнеса молча не добавляются
 
 `PUT /api/bookings/{id}` — только для `pending` брони, и только `staff_id`.

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.db import transaction
 from datetime import datetime, date, time
 from ninja.errors import HttpError
 from django.utils import timezone
@@ -13,6 +14,7 @@ from core.models import (
     BlockedDate,
 )
 from core.services.notification import notify
+from core.services.service import booked_guests
 
 
 def _parse_time(value):
@@ -114,7 +116,49 @@ def create_booking(
             "end_time must be after start_time"
         )
 
-    booking = Booking.objects.create(
+    if data.guest_count < 1:
+
+        raise HttpError(
+            400,
+            "guest_count must be at least 1"
+        )
+
+    if data.guest_count > service.capacity:
+
+        raise HttpError(
+            400,
+            f"This service allows at most {service.capacity} guests per slot"
+        )
+
+    with transaction.atomic():
+
+        # Lock the service row so parallel bookings can't overbook the slot
+        Service.objects.select_for_update().get(id=service.id)
+
+        taken = booked_guests(
+            service,
+            data.booking_date,
+            start_time,
+            end_time,
+        )
+
+        if taken + data.guest_count > service.capacity:
+
+            raise HttpError(
+                400,
+                f"Only {max(service.capacity - taken, 0)} places left for this time"
+            )
+
+        booking = _create_booking_record(
+            user, business, service, branch, staff, data, start_time, end_time
+        )
+
+    return _finish_booking(user, business, service, booking, data)
+
+
+def _create_booking_record(user, business, service, branch, staff, data, start_time, end_time):
+
+    return Booking.objects.create(
         user=user,
         business=business,
         service=service,
@@ -126,6 +170,9 @@ def create_booking(
         guest_count=data.guest_count,
         total_price=service.price,
     )
+
+
+def _finish_booking(user, business, service, booking, data):
 
     total_price = Decimal(
         str(service.price)
@@ -388,12 +435,11 @@ def calculate_available_slots(business_id: int, staff_id: int, target_date: date
     # 2. Extract day-of-week configuration (0 = Monday, 6 = Sunday)
     weekday = target_date.weekday()
     schedule = WorkingHours.objects.filter(business_id=business_id, day_of_week=weekday).first()
-    if not schedule or not getattr(schedule, 'is_working_day', True):
+    if not schedule or schedule.is_closed:
         return []
 
-    # Fallback default hours if fields aren't present in model definition
-    start_time = getattr(schedule, 'start_time', datetime.strptime("09:00", "%H:%M").time())
-    end_time = getattr(schedule, 'end_time', datetime.strptime("18:00", "%H:%M").time())
+    start_time = schedule.open_time
+    end_time = schedule.close_time
 
     slots = []
     current_time = datetime.combine(target_date, start_time)
