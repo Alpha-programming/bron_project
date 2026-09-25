@@ -111,6 +111,8 @@ class BusinessListSchema(Schema):
 
     logo: str | None
 
+    views_count: int
+
     @staticmethod
     def resolve_logo(obj, context):
         return absolute_media_url(context["request"], obj.logo)
@@ -143,6 +145,8 @@ class BusinessOutSchema(Schema):
     social_links: SocialLinksSchema
     comments: str | None = None
 
+    views_count: int
+
     created_at: str
 
     @staticmethod
@@ -174,3 +178,10 @@ class BusinessStatsOutSchema(Schema):
     approved_bookings: int
     cancelled_bookings: int
     total_revenue: str
+    views_count: int
+
+
+class BusinessViewOutSchema(Schema):
+
+    counted: bool
+    views_count: int

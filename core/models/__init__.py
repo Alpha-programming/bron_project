@@ -14,5 +14,6 @@ from .chat import *
 from .message import *
 from .blockeddate import BlockedDate
 from .business_gallery import *
+from .business_view import *
 from .product import *
 from .telegram_link import *

@@ -1,8 +1,10 @@
 from ninja import Router
 from ninja.errors import HttpError
 from core.security import JWTAuth
-from core.schemas.business import BusinessCreateSchema, BusinessUpdateSchema, BusinessOutSchema, BusinessListSchema, BusinessStatsOutSchema
-from core.services.business import get_all_businesses, get_business_by_id, create_business, update_business, delete_business
+from core.schemas.business import BusinessCreateSchema, BusinessUpdateSchema, BusinessOutSchema, BusinessListSchema, BusinessStatsOutSchema, BusinessViewOutSchema
+from core.services.business import get_all_businesses, get_business_by_id, create_business, update_business, delete_business, register_business_view
+from core.utils.auth import get_optional_user
+from core.utils.helpers import get_client_ip
 from core.models import User, Business
 from core.services.business import calculate_business_metrics
 from typing import List
@@ -72,6 +74,20 @@ def delete_business_view(request, business_id: int):
 
     business = get_business_by_id(business_id)
     return delete_business(user, business)
+
+
+@router.post("/{business_id}/view", response=BusinessViewOutSchema)
+def register_view(request, business_id: int):
+    """
+    Called by the frontend when a business page is opened.
+    Public; a Bearer token is used only to deduplicate per user.
+    """
+    business = get_business_by_id(business_id)
+    return register_business_view(
+        business,
+        get_optional_user(request),
+        get_client_ip(request),
+    )
 
 
 @router.get("/{business_id}/stats", auth=JWTAuth(), response=BusinessStatsOutSchema)

@@ -71,6 +71,9 @@ class Business(models.Model):
 
     is_active = models.BooleanField(default=False)
 
+    # Denormalised count of unique views, see BusinessView
+    views_count = models.PositiveIntegerField(default=0)
+
     class Meta:
         ordering = ["-created_at"]
 
