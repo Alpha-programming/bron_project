@@ -46,6 +46,9 @@ def update_profile(user: User, data) -> User:
 
     # Dynamically map payload fields directly onto the User model record properties
     for field, value in payload_dict.items():
+        # Name columns are NOT NULL; treat explicit null as "clear"
+        if field in ("first_name", "last_name") and value is None:
+            value = ""
         setattr(user, field, value)
 
     user.save()

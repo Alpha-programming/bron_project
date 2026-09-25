@@ -43,6 +43,8 @@ def register_user(data):
         email=data.email,
         phone=data.phone,
         password=data.password,
+        first_name=data.first_name,
+        last_name=data.last_name,
     )
 
     return user

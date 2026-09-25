@@ -76,8 +76,10 @@ class BusinessAdmin(admin.ModelAdmin):
         "id",
         "name",
         "owner",
+        "owner_name",
         "category",
         "phone",
+        "email",
         "is_active",
         "created_at",
     )
@@ -91,6 +93,8 @@ class BusinessAdmin(admin.ModelAdmin):
     search_fields = (
         "name",
         "address",
+        "email",
+        "owner_name",
         "owner__username",
     )
 

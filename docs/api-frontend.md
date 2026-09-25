@@ -18,6 +18,27 @@
 | `GET /api/staff/{id}/bookings`, `GET /api/bookings/staff/{id}` | требуют токен владельца бизнеса |
 | `GET /api/businesses/{id}/stats`, `/analytics` | только владелец бизнеса (иначе 403) |
 | `POST /api/auth/register` при занятом username/email/phone отвечал 200 с `user_id: null` | отвечает **400** с `{"detail": "Email already exists"}` |
+| `POST /api/businesses/create`: полей `email` и `owner_name` не было | **обязательны** (422 без них) |
+| `social_links` — произвольный словарь | только ключи `instagram`, `telegram`, `facebook`, `tiktok`, `youtube`; значение — полный URL с `http(s)://` |
+
+---
+
+## Имя пользователя в профиле
+
+Отдельного эндпоинта нет — имя сохраняется через существующий `PUT /api/users/profile`:
+
+```bash
+curl -X PUT https://bronofficial.com/api/users/profile \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"first_name": "Арслан", "last_name": "Бахадыров"}'
+```
+
+Профиль (`GET/PUT /api/users/profile`) и `GET /api/auth/me` теперь содержат `first_name` и `last_name`, профиль — ещё и `full_name`:
+```json
+{"id": 1, "username": "arslan", "first_name": "Арслан", "last_name": "Бахадыров", "full_name": "Арслан Бахадыров", "email": "...", "phone": "...", "avatar": null, "role": "customer"}
+```
+
+`POST /api/auth/register` тоже принимает необязательные `first_name` и `last_name`.
 
 ---
 
@@ -107,19 +128,52 @@ GET /api/categories/{slug}   (публичный)
 
 `business_count` — количество **одобренных** (активных) бизнесов в категории. Пересчитывается автоматически: новый бизнес попадает в счётчик после одобрения админом.
 
-### Создание бизнеса с категорией
+### Заявка бизнеса (создание)
+
+Обязательные поля: `name`, `category_id`, `address`, `phone`, `email`, `owner_name` (имя владельца / контактного лица).
+Необязательные: `description`, `latitude`, `longitude`, `tin`, `website`, `social_links`, `comments`.
 
 ```bash
 curl -X POST https://bronofficial.com/api/businesses/create \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "Iron Gym", "category_id": 1, "address": "Tashkent", "phone": "+998901234567"}'
+  -d '{
+    "name": "Iron Gym",
+    "category_id": 1,
+    "address": "Tashkent, Amir Temur 10",
+    "phone": "+998901234567",
+    "email": "info@irongym.uz",
+    "owner_name": "Ivan Petrov",
+    "website": "https://irongym.uz",
+    "social_links": {
+      "instagram": "https://instagram.com/irongym",
+      "telegram": "https://t.me/irongym",
+      "facebook": "",
+      "tiktok": null
+    }
+  }'
 ```
 
 - `200 {"message": "Business created successfully", "business_id": 42}`
+- `422` — нет `email`/`owner_name`, некорректный email, или ссылка в `social_links` не начинается с `http://`/`https://`. В `detail[].loc` указано проблемное поле. Пустая строка или `null` в соцсети = «не указано».
 - `404 {"detail": "Category not found"}` — если `category_id` не существует или категория отключена
 - `422` — если передать старое поле `category` вместо `category_id`
 
-Обновление: `PUT /api/businesses/{id}` с `{"category_id": 2}`.
+В ответах (`GET /api/businesses/{id}`, `/search`, `/category/{slug}`) всегда приходят все пять ключей `social_links`, незаполненные — `null`:
+```json
+{
+  "id": 42,
+  "name": "Iron Gym",
+  "email": "info@irongym.uz",
+  "owner_name": "Ivan Petrov",
+  "phone": "+998901234567",
+  "website": "https://irongym.uz",
+  "social_links": {"instagram": "https://instagram.com/irongym", "telegram": "https://t.me/irongym", "facebook": null, "tiktok": null, "youtube": null},
+  "category": {"id": 1, "name": "Gym", "slug": "gym"},
+  "...": "..."
+}
+```
+
+Обновление: `PUT /api/businesses/{id}` принимает те же поля (все необязательные), например `{"category_id": 2}`. `social_links` заменяется целиком, а не сливается с прежним.
 
 Список бизнесов в категории (как раньше): `GET /api/businesses/category/{slug}`.
 

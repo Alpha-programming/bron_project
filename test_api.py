@@ -476,9 +476,14 @@ def test_business():
         "category_id": 1,
         "address": "Tashkent",
         "phone": f"+99893{RUN_ID[:7]}",
+        "email": f"business{RUN_ID}@example.com",
+        "owner_name": "Test Owner",
         "tin": "",
         "website": "",
-        "social_links": {},
+        "social_links": {
+            "instagram": f"https://instagram.com/bron{RUN_ID}",
+            "telegram": "",
+        },
         "comments": "",
     }
 
