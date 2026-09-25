@@ -1,5 +1,5 @@
 from ninja import Router
-from core.security import JWTAuth
+from core.security import JWTAuth, TelegramBotAuth
 from core.schemas.user import (
     UserProfileOutSchema,
     UserProfileUpdateSchema,
@@ -36,7 +36,7 @@ def update_user_profile(request, payload: UserProfileUpdateSchema):
     return update_profile(user, payload)
 
 
-@router.post("/telegram/connect", response=LoginResponseSchema)
+@router.post("/telegram/connect", auth=TelegramBotAuth(), response=LoginResponseSchema)
 def one_time_telegram_token(request, payload: PhoneTgSchema):
     try:
         user = User.objects.get(phone=payload.phone)
