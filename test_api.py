@@ -547,6 +547,36 @@ def test_business():
         name="Business search",
     )
 
+    view = request(
+        "POST",
+        f"/businesses/{BUSINESS_ID}/view",
+        headers=CUSTOMER_HEADERS,
+        expected=(200,),
+        name="Business view (customer, first)",
+    )
+    if view is not None and view.status_code == 200 and not view.json().get("counted"):
+        print("    ⚠️  first customer view was not counted")
+
+    view = request(
+        "POST",
+        f"/businesses/{BUSINESS_ID}/view",
+        headers=CUSTOMER_HEADERS,
+        expected=(200,),
+        name="Business view (customer, repeat)",
+    )
+    if view is not None and view.status_code == 200 and view.json().get("counted"):
+        print("    ⚠️  repeat customer view was counted twice")
+
+    view = request(
+        "POST",
+        f"/businesses/{BUSINESS_ID}/view",
+        headers=OWNER_HEADERS,
+        expected=(200,),
+        name="Business view (owner, ignored)",
+    )
+    if view is not None and view.status_code == 200 and view.json().get("counted"):
+        print("    ⚠️  owner view was counted")
+
     request(
         "GET",
         "/businesses/category/gym",

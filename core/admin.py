@@ -4,6 +4,7 @@ from core.models import (
     User,
     Category,
     Business,
+    BusinessView,
     Service,
     Booking,
     Payment,
@@ -81,6 +82,7 @@ class BusinessAdmin(admin.ModelAdmin):
         "phone",
         "email",
         "is_active",
+        "views_count",
         "created_at",
     )
 
@@ -99,6 +101,21 @@ class BusinessAdmin(admin.ModelAdmin):
     )
 
     ordering = ("-created_at",)
+
+
+@admin.register(BusinessView)
+class BusinessViewAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "business",
+        "user",
+        "ip",
+        "viewed_at",
+    )
+
+    list_filter = ("business",)
+
+    ordering = ("-viewed_at",)
 
 
 @admin.register(Service)
