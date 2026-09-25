@@ -1,4 +1,5 @@
 from ninja import Router
+from ninja.errors import HttpError
 from core.security import JWTAuth
 from core.schemas.business import BusinessCreateSchema, BusinessUpdateSchema, BusinessOutSchema, BusinessListSchema, BusinessStatsOutSchema
 from core.services.business import get_all_businesses, get_business_by_id, create_business, update_business, delete_business
@@ -30,9 +31,10 @@ def search_businesses(request, q: str):
     """
     Search businesses by name, description, or address match.
     """
+    qs = Business.objects.select_related("owner", "category").filter(is_active=True)
     if not q:
-        return Business.objects.filter(is_active=True)
-    return Business.objects.filter(is_active=True, name__icontains=q) | Business.objects.filter(is_active=True, description__icontains=q)
+        return qs
+    return qs.filter(name__icontains=q) | qs.filter(description__icontains=q)
 
 
 # --- FIXED: MOVED UP ABOVE THE DYNAMIC ID PARAMETER ---
@@ -41,7 +43,9 @@ def filter_businesses_by_category(request, category: str):
     """
     Filter operational venues based on industry categories.
     """
-    return Business.objects.filter(is_active=True, category__iexact=category)
+    return Business.objects.select_related("owner", "category").filter(
+        is_active=True, category__slug=category.lower()
+    )
 
 
 @router.get("/{business_id}", response=BusinessOutSchema)
@@ -75,13 +79,17 @@ def get_business_statistics(request, business_id: int):
     """
     Returns data visualization stats for administrators and managers.
     """
-    user = request.auth
-    if not user or hasattr(user, '_wrapped'):
-        user = User.objects.get(id=request.user.id)
+    business = get_business_by_id(business_id)
+    if business.owner_id != request.auth.id and not request.auth.is_staff:
+        raise HttpError(403, "Permission denied")
 
     return calculate_business_metrics(business_id)
 
 
 @router.get("/{business_id}/analytics", auth=JWTAuth())
 def get_business_analytics(request, business_id: int):
+    business = get_business_by_id(business_id)
+    if business.owner_id != request.auth.id and not request.auth.is_staff:
+        raise HttpError(403, "Permission denied")
+
     return calculate_business_metrics(business_id)

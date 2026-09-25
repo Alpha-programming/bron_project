@@ -23,8 +23,7 @@ class UserOutSchema(Schema):
     username: str
     email: str
     phone: str
-    # Fixed: Fallback to a default string if field is missing or empty
-    role: str = "client"
+    role: str = "customer"
 
 class MessageSchema(Schema):
     detail: str

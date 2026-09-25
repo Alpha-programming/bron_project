@@ -14,6 +14,8 @@ from core.routes.reviews import router as reviews_router
 from core.routes.favorites import router as favorites_router
 from core.routes.business_gallery import router as business_gallery_router
 from core.routes.business_logo import router as business_logo_router
+from core.routes.category import router as category_router
+from core.routes.notification import router as notification_router
 
 api = NinjaAPI(
     title="Iron API",
@@ -79,6 +81,10 @@ api.add_router(
     "/businesses/",
     business_logo_router
 )
+
+api.add_router("/categories/", category_router)
+
+api.add_router("/notifications/", notification_router)
 
 api.add_router("/reviews", reviews_router)
 

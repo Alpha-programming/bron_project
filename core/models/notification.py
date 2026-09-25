@@ -5,9 +5,31 @@ from .user import User
 
 class Notification(models.Model):
 
+    TYPE_CHOICES = (
+        ("booking_created", "Booking created"),
+        ("booking_confirmed", "Booking confirmed"),
+        ("booking_rejected", "Booking rejected"),
+        ("booking_cancelled", "Booking cancelled"),
+    )
+
     user = models.ForeignKey(
         User,
-        on_delete=models.CASCADE
+        on_delete=models.CASCADE,
+        related_name="notifications"
+    )
+
+    notification_type = models.CharField(
+        max_length=30,
+        choices=TYPE_CHOICES,
+        default="booking_created"
+    )
+
+    booking = models.ForeignKey(
+        "Booking",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notifications"
     )
 
     title = models.CharField(max_length=255)
@@ -20,6 +42,9 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "is_read"]),
+        ]
 
     def __str__(self):
         return self.title

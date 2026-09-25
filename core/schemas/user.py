@@ -1,5 +1,7 @@
 from ninja import Schema
 
+from core.utils.helpers import absolute_media_url
+
 class PhoneTgSchema(Schema):
     phone: str
 
@@ -10,11 +12,16 @@ class UserProfileOutSchema(Schema):
     email: str
     phone: str
     telegram_id: int | None = None
+    avatar: str | None = None
     role: str
     language: str
     is_verified: bool
     rating: float
     reviews_count: int
+
+    @staticmethod
+    def resolve_avatar(obj, context):
+        return absolute_media_url(context["request"], obj.avatar)
 
 class UserProfileUpdateSchema(Schema):
 

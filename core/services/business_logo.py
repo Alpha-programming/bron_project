@@ -2,6 +2,8 @@ from ninja.errors import HttpError
 
 from core.models import Business
 
+from core.utils.validators import validate_image
+
 
 def upload_logo(
     user,
@@ -27,6 +29,13 @@ def upload_logo(
         raise HttpError(
             403,
             "Permission denied"
+        )
+
+    validate_image(image)
+
+    if business.logo:
+        business.logo.delete(
+            save=False
         )
 
     business.logo = image

@@ -9,6 +9,7 @@ from core.schemas.staff import (
     StaffScheduleOutSchema,  # New
 )
 from core.schemas.booking import BookingOutSchema  # New
+from core.services.booking import get_staff_bookings
 from core.services.staff import (
     create_staff,
     get_staff_list,
@@ -17,7 +18,6 @@ from core.services.staff import (
     update_staff,
     delete_staff,
     get_staff_schedule_timeline,  # New
-    get_staff_assigned_bookings,  # New
 )
 from typing import List
 
@@ -53,13 +53,13 @@ def staff_schedule_view(request, staff_id: int):
     return get_staff_schedule_timeline(staff)
 
 
-@router.get("/{staff_id}/bookings", response=List[BookingOutSchema])
+@router.get("/{staff_id}/bookings", auth=JWTAuth(), response=List[BookingOutSchema])
 def staff_bookings_view(request, staff_id: int):
     """
     Fetches all client reservations booked under this individual staff provider.
+    Only the owner of the staff member's business can access them.
     """
-    staff = get_staff(staff_id)
-    return get_staff_assigned_bookings(staff)
+    return get_staff_bookings(request.auth, staff_id)
 
 
 # Keep your individual update and delete profiles exactly as they are at the bottom

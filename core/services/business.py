@@ -1,5 +1,6 @@
 from ninja.errors import HttpError
 from core.models import Business
+from core.services.category import get_category_by_id
 from django.db.models import Sum
 from core.models import Booking
 from decimal import Decimal
@@ -8,7 +9,8 @@ from decimal import Decimal
 def get_all_businesses():
 
     return Business.objects.select_related(
-        "owner"
+        "owner",
+        "category",
     ).filter(is_active=True)
 
 
@@ -19,7 +21,8 @@ def get_business_by_id(
     try:
 
         return Business.objects.select_related(
-            "owner"
+            "owner",
+            "category",
         ).get(
             id=business_id
         )
@@ -46,6 +49,8 @@ def create_business(user, data):
     # JSONField should receive a dictionary, not None.
     values["social_links"] = values.get("social_links") or {}
 
+    values["category"] = get_category_by_id(values.pop("category_id"))
+
     return Business.objects.create(
         owner=user,
         **values
@@ -61,6 +66,11 @@ def update_business(user, business, data):
         )
 
     values = data.model_dump(exclude_unset=True)
+
+    if values.get("category_id") is not None:
+        values["category"] = get_category_by_id(values.pop("category_id"))
+    else:
+        values.pop("category_id", None)
 
     non_nullable_text_fields = {
         "description",

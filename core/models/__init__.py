@@ -1,4 +1,5 @@
 from .user import *
+from .category import *
 from .business import *
 from .branch import *
 from .staff import *

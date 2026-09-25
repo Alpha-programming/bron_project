@@ -14,7 +14,7 @@ class BookingCreateSchema(Schema):
     product_ids: List[int] = []
 
 class BookingUpdateSchema(Schema):
-    status: Optional[str] = None
+    # Status changes go through /approve, /reject and /cancel only
     staff_id: Optional[int] = None
 
 class BookingOutSchema(Schema):

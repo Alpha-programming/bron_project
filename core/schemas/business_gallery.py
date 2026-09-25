@@ -1,5 +1,7 @@
 from ninja import Schema
 
+from core.utils.helpers import absolute_media_url
+
 
 class BusinessGalleryOutSchema(Schema):
 
@@ -10,6 +12,10 @@ class BusinessGalleryOutSchema(Schema):
     image: str
 
     created_at: str
+
+    @staticmethod
+    def resolve_image(obj, context):
+        return absolute_media_url(context["request"], obj.image)
 
     @staticmethod
     def resolve_created_at(obj):
