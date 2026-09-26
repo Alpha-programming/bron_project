@@ -19,6 +19,14 @@ def get_all_businesses():
     ).filter(is_active=True)
 
 
+def get_user_businesses(user):
+    """All businesses of the owner, including ones waiting for approval."""
+    return Business.objects.select_related(
+        "owner",
+        "category",
+    ).filter(owner=user)
+
+
 def get_business_by_id(
     business_id: int
 ):

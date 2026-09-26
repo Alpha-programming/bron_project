@@ -561,11 +561,49 @@ def test_business():
         name="Business list",
     )
 
-    request(
+    response = request(
         "GET",
         f"/businesses/{BUSINESS_ID}",
         expected=(200,),
         name="Business detail",
+    )
+
+    if response is not None and response.status_code == 200:
+        body = response.json()
+        if body.get("status") != "pending":
+            print(f"    ⚠️  new business status is {body.get('status')!r}, expected 'pending'")
+        if "owner_username" in body:
+            print("    ⚠️  public detail exposes owner_username")
+
+    response = request(
+        "GET",
+        "/businesses/my",
+        headers=OWNER_HEADERS,
+        expected=(200,),
+        name="My businesses (owner, includes pending)",
+    )
+
+    if response is not None and response.status_code == 200:
+        mine = {b["id"]: b["status"] for b in response.json()}
+        if mine.get(BUSINESS_ID) != "pending":
+            print(f"    ⚠️  pending business missing from /businesses/my: {mine}")
+
+    response = request(
+        "GET",
+        "/businesses/my",
+        headers=CUSTOMER_HEADERS,
+        expected=(200,),
+        name="My businesses (customer, empty)",
+    )
+
+    if response is not None and response.status_code == 200 and response.json():
+        print(f"    ⚠️  customer sees businesses: {response.json()}")
+
+    request(
+        "GET",
+        "/businesses/my",
+        expected=(401,),
+        name="My businesses without token rejected",
     )
 
     request(
@@ -1238,6 +1276,19 @@ def test_booking():
         )
 
         return False
+
+    response = request(
+        "GET",
+        "/businesses/my",
+        headers=OWNER_HEADERS,
+        expected=(200,),
+        name="My businesses after approval",
+    )
+
+    if response is not None and response.status_code == 200:
+        mine = {b["id"]: b["status"] for b in response.json()}
+        if mine.get(BUSINESS_ID) != "approved":
+            print(f"    ⚠️  approved business has status {mine.get(BUSINESS_ID)!r}")
 
     booking_date = (
         date.today()
