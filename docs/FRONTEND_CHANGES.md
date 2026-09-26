@@ -248,6 +248,7 @@ await api(`/notifications/${id}`, { method: "DELETE", token });
 | `booking_confirmed` | клиенту | владелец подтвердил |
 | `booking_rejected` | клиенту | владелец отклонил |
 | `booking_cancelled` | другой стороне | клиент или владелец отменил |
+| `booking_rescheduled` | другой стороне | клиент или владелец перенёс бронь |
 
 Тексты `title` и `message` пока приходят на английском. Для локализации ориентируйтесь на `notification_type`.
 
@@ -275,6 +276,31 @@ Push-уведомлений нет, только опрос `unread-count`.
 
 Клиент больше не может сам поставить брони статус `confirmed`.
 
+### Перенос брони
+
+```js
+const res = await api(`/bookings/${bookingId}/reschedule`, {
+  method: "PATCH", token,
+  body: JSON.stringify({ booking_date: "2026-10-05", start_time: slot.start_time, end_time: slot.end_time }),
+});
+
+if (res.status === 409) {
+  // время заняли — показать detail и обновить слоты
+  const { detail } = await res.json();
+  showError(detail);
+  reloadAvailability();
+} else if (!res.ok) {
+  showError((await res.json()).detail);   // 400: прошлое, выходной, вне часов работы и т.д.
+} else {
+  const booking = await res.json();        // обновлённая бронь
+}
+```
+
+- Доступно клиенту брони и владельцу бизнеса; только для `pending` и `confirmed`.
+- **Клиент** переносит **подтверждённую** бронь → статус снова `pending`, нужно новое подтверждение владельца. Покажите это пользователю до отправки.
+- Другая сторона получает уведомление `booking_rescheduled`.
+- Экран выбора времени тот же, что при записи: `available-dates` → `availability` услуги (`booking.service_id`).
+
 ---
 
 ## 9. Чек-лист для фронта
@@ -289,5 +315,6 @@ Push-уведомлений нет, только опрос `unread-count`.
 - [ ] Услуги: фото, `capacity`, экран записи через `available-dates` → `availability` → `bookings/create`
 - [ ] Колокольчик уведомлений: `unread-count`, список, «прочитать все»
 - [ ] Запросы броней и статистики — с токеном
+- [ ] Перенос брони: `PATCH /bookings/{id}/reschedule`, обработка `409` (время занято)
 
 Вопросы по API — к бэкенду. Актуальные поля всегда в Swagger: https://bronofficial.com/api/docs

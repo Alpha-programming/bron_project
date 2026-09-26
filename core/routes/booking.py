@@ -13,6 +13,7 @@ from core.schemas.booking import (
     BookingOutSchema,
     BookingListSchema,
     BookingAttendanceSchema,
+    BookingRescheduleSchema,
 )
 
 from core.services.booking import (
@@ -27,6 +28,7 @@ from core.services.booking import (
     approve_booking as approve,
     reject_booking as reject,
     cancel_booking as cancel,
+    reschedule_booking,
     calculate_available_slots,
     update_booking_attendance,
 )
@@ -300,6 +302,32 @@ def cancel_booking_view(
     return cancel(
         request.auth,
         get_booking(booking_id)
+    )
+
+
+# ============================================================
+# RESCHEDULE BOOKING
+# ============================================================
+
+@router.patch(
+    "/{booking_id}/reschedule",
+    auth=JWTAuth(),
+    response=BookingOutSchema
+)
+def reschedule_booking_view(
+    request,
+    booking_id: int,
+    payload: BookingRescheduleSchema
+):
+    """
+    Move a booking to another date/time.
+    409 if the new slot is already taken.
+    """
+
+    return reschedule_booking(
+        request.auth,
+        get_booking(booking_id),
+        payload
     )
 
 

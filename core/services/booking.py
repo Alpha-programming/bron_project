@@ -12,6 +12,7 @@ from core.models import (
     Staff,
     Product,
     BlockedDate,
+    WorkingHours,
 )
 from core.services.notification import notify
 from core.services.service import booked_guests
@@ -323,6 +324,139 @@ def cancel_booking(user, booking):
             "booking_cancelled",
             "Booking cancelled",
             f"{booking.business.name} cancelled your booking on {when}",
+            booking=booking,
+        )
+
+    return booking
+
+
+RESCHEDULABLE_STATUSES = ("pending", "confirmed")
+
+
+def reschedule_booking(user, booking, data):
+    """
+    Moves a booking to a new date/time after checking the new slot is free.
+    Customer or business owner only. A customer moving a confirmed booking
+    sends it back to "pending" so the owner re-approves the new time.
+    """
+    is_customer = booking.user_id == user.id
+    is_owner = booking.business.owner_id == user.id
+
+    if not (is_customer or is_owner or user.is_staff):
+        raise HttpError(403, "Permission denied")
+
+    if booking.status not in RESCHEDULABLE_STATUSES:
+        raise HttpError(
+            400,
+            f"Booking with status '{booking.status}' cannot be rescheduled"
+        )
+
+    new_date = data.booking_date
+    start_time = _parse_time(data.start_time)
+    end_time = _parse_time(data.end_time)
+
+    if end_time <= start_time:
+        raise HttpError(400, "end_time must be after start_time")
+
+    now = timezone.localtime()
+    if new_date < now.date() or (new_date == now.date() and start_time <= now.time()):
+        raise HttpError(400, "Cannot reschedule to a time in the past")
+
+    if (
+        new_date == booking.booking_date
+        and start_time == booking.start_time
+        and end_time == booking.end_time
+    ):
+        raise HttpError(400, "Booking is already at this time")
+
+    business = booking.business
+
+    if BlockedDate.objects.filter(business=business, date=new_date).exists():
+        raise HttpError(400, "Selected date is blocked")
+
+    # Only enforce working hours when the business has configured them
+    if WorkingHours.objects.filter(business=business).exists():
+        hours = WorkingHours.objects.filter(
+            business=business,
+            day_of_week=new_date.weekday(),
+        ).first()
+
+        if hours is None or hours.is_closed:
+            raise HttpError(400, "Business is closed on this day")
+
+        opening, closing = working_day_bounds(new_date, hours.open_time, hours.close_time)
+        if (
+            datetime.combine(new_date, start_time) < opening
+            or datetime.combine(new_date, end_time) > closing
+        ):
+            raise HttpError(
+                400,
+                f"Time must be within working hours {opening:%H:%M}-{closing:%H:%M}"
+            )
+
+    service = booking.service
+
+    with transaction.atomic():
+
+        # Same lock as create_booking so a reschedule and a new booking
+        # can't both take the last place
+        Service.objects.select_for_update().get(id=service.id)
+
+        taken = booked_guests(
+            service,
+            new_date,
+            start_time,
+            end_time,
+            exclude_booking_id=booking.id,
+        )
+
+        if taken + booking.guest_count > service.capacity:
+            raise HttpError(
+                409,
+                f"Selected time is not available: only {max(service.capacity - taken, 0)} places left"
+            )
+
+        # The assigned staff member can't be in two bookings at once
+        if booking.staff_id and Booking.objects.filter(
+            staff_id=booking.staff_id,
+            booking_date=new_date,
+            status__in=RESCHEDULABLE_STATUSES,
+            start_time__lt=end_time,
+            end_time__gt=start_time,
+        ).exclude(id=booking.id).exists():
+            raise HttpError(409, "Selected time is not available: staff member is busy")
+
+        old_when = f"{booking.booking_date} at {booking.start_time:%H:%M}"
+
+        booking.booking_date = new_date
+        booking.start_time = start_time
+        booking.end_time = end_time
+
+        update_fields = ["booking_date", "start_time", "end_time"]
+
+        if is_customer and booking.status == "confirmed":
+            booking.status = "pending"
+            update_fields.append("status")
+
+        booking.save(update_fields=update_fields)
+
+    new_when = f"{new_date} at {start_time:%H:%M}"
+
+    # Tell the other side
+    if is_customer:
+        notify(
+            business.owner,
+            "booking_rescheduled",
+            "Booking rescheduled",
+            f"{booking.user.username} moved the booking from {old_when} to {new_when}",
+            booking=booking,
+        )
+    else:
+        notify(
+            booking.user,
+            "booking_rescheduled",
+            "Booking rescheduled",
+            f"{business.name} moved your booking from {old_when} to {new_when}",
             booking=booking,
         )
 
