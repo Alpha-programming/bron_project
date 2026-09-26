@@ -22,6 +22,36 @@ from core.models import (
     TelegramLinkToken
 )
 
+class BusinessGalleryInline(admin.TabularInline):
+    fk_name = 'business'
+    model = BusinessGallery
+    extra = 1
+
+class StaffInline(admin.TabularInline):
+    fk_name = 'business'
+    model = Staff
+    extra = 1
+
+class WorkingHoursInline(admin.TabularInline):
+    fk_name = 'business'
+    model = WorkingHours
+    extra = 1
+
+class ServicesInline(admin.TabularInline):
+    fk_name = 'business'
+    model = Service
+    extra = 1
+
+class BranchInline(admin.TabularInline):
+    fk_name = 'business'
+    model = Branch
+    extra = 1
+
+class ProductsInline(admin.TabularInline):
+    fk_name = 'business'
+    model = Product
+    extra = 1
+
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -101,7 +131,7 @@ class BusinessAdmin(admin.ModelAdmin):
     )
 
     ordering = ("-created_at",)
-
+    inlines = [BusinessGalleryInline, WorkingHoursInline, BranchInline, ServicesInline, StaffInline, ProductsInline]
 
 @admin.register(BusinessView)
 class BusinessViewAdmin(admin.ModelAdmin):
@@ -251,7 +281,6 @@ class FavouriteAdmin(admin.ModelAdmin):
 
 @admin.register(WorkingHours)
 class WorkingHoursAdmin(admin.ModelAdmin):
-
     list_display = (
         "id",
         "business",
