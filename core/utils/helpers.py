@@ -16,10 +16,17 @@ def working_day_bounds(day, open_time, close_time):
 def get_client_ip(request):
     """
     Real client address behind nginx (first X-Forwarded-For entry), else REMOTE_ADDR.
+    A malformed header (e.g. "unknown") falls back to REMOTE_ADDR, since the
+    value is stored in inet columns and PostgreSQL rejects non-IP strings.
     """
+    from ipaddress import ip_address
+
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        try:
+            return str(ip_address(forwarded.split(",")[0].strip()))
+        except ValueError:
+            pass
     return request.META.get("REMOTE_ADDR")
 
 

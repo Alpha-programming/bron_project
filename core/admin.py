@@ -4,6 +4,7 @@ from core.models import (
     User,
     Category,
     Business,
+    BusinessApplication,
     BusinessView,
     Service,
     Booking,
@@ -146,6 +147,45 @@ class BusinessViewAdmin(admin.ModelAdmin):
     list_filter = ("business",)
 
     ordering = ("-viewed_at",)
+
+
+@admin.register(BusinessApplication)
+class BusinessApplicationAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "full_name",
+        "phone",
+        "email",
+        "social",
+        "comment",
+        "status",
+        "user",
+        "created_at",
+    )
+
+    list_editable = ("status",)
+
+    list_filter = (
+        "status",
+        "created_at",
+    )
+
+    search_fields = (
+        "full_name",
+        "phone",
+        "email",
+        "social",
+    )
+
+    list_select_related = ("user",)
+
+    readonly_fields = (
+        "user",
+        "ip",
+        "created_at",
+    )
+
+    ordering = ("-created_at",)
 
 
 @admin.register(Service)
