@@ -3,6 +3,7 @@ from ninja import NinjaAPI
 from core.routes.auth import router as auth_router
 from core.routes.user import router as user_router
 from core.routes.business import router as business_router
+from core.routes.business_application import router as business_application_router
 from core.routes.service import router as service_router
 from core.routes.product import router as product_router
 from core.routes.branch import router as branch_router
@@ -81,6 +82,8 @@ api.add_router(
     "/businesses/",
     business_logo_router
 )
+
+api.add_router("/business-applications/", business_application_router)
 
 api.add_router("/categories/", category_router)
 

@@ -254,6 +254,35 @@ def get_id(response, *possible_keys):
     return None
 
 
+def run_django_locally(code):
+    """
+    Runs a snippet through manage.py shell. Works only against a local
+    server, where this script and the API share the same database.
+    """
+    if "127.0.0.1" not in BASE_URL and "localhost" not in BASE_URL:
+        return False
+
+    manage = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manage.py")
+
+    if not os.path.exists(manage):
+        return False
+
+    import subprocess
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            manage,
+            "shell",
+            "-c",
+            code,
+        ],
+        capture_output=True,
+    )
+
+    return result.returncode == 0
+
+
 # ============================================================
 # STEP 0 — SERVER
 # ============================================================
@@ -601,6 +630,92 @@ def test_business():
     )
 
     return True
+
+
+# ============================================================
+# STEP 3.1 — BUSINESS APPLICATION FORM
+# ============================================================
+
+def test_business_application():
+
+    print_section("STEP 3.1 — BUSINESS APPLICATION FORM")
+
+    full_name = f"BRON Test Applicant {RUN_ID}"
+
+    # RUN_ID is hex, but the endpoint accepts digits only
+    digits = f"{int(RUN_ID, 16) % 10 ** 7:07d}"
+    phone = f"+998 90 {digits[:3]} {digits[3:5]} {digits[5:]}"
+
+    response = request(
+        "POST",
+        "/business-applications/create",
+        json={
+            "full_name": full_name,
+            "phone": phone,
+        },
+        expected=(201,),
+        name="Application (anonymous, name + phone)",
+    )
+
+    if response is not None and response.status_code == 201:
+        body = response.json()
+        if body.get("phone") != f"+99890{digits}":
+            print(f"    ⚠️  phone was not normalized: {body.get('phone')}")
+        if body.get("status") != "new":
+            print(f"    ⚠️  unexpected status: {body.get('status')}")
+
+    request(
+        "POST",
+        "/business-applications/create",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "full_name": full_name,
+            "phone": phone,
+            "email": f"applicant{RUN_ID}@example.com",
+            "social": f"@bron{RUN_ID}",
+            "comment": "Automated BRON integration test.",
+        },
+        expected=(201,),
+        name="Application (customer, all fields)",
+    )
+
+    request(
+        "POST",
+        "/business-applications/create",
+        json={"full_name": full_name},
+        expected=(422,),
+        name="Application without phone rejected",
+    )
+
+    request(
+        "POST",
+        "/business-applications/create",
+        json={"full_name": full_name, "phone": "call me"},
+        expected=(422,),
+        name="Application with invalid phone rejected",
+    )
+
+    request(
+        "POST",
+        "/business-applications/create",
+        json={"full_name": full_name, "phone": phone, "email": "not-an-email"},
+        expected=(422,),
+        name="Application with invalid email rejected",
+    )
+
+    request(
+        "POST",
+        "/business-applications/create",
+        json={"full_name": full_name, "phone": phone, "comment": "x" * 121},
+        expected=(422,),
+        name="Application with comment over 120 chars rejected",
+    )
+
+    # The form is rate-limited per IP, so test runs shouldn't use up the quota
+    run_django_locally(
+        "from core.models import BusinessApplication; "
+        f"BusinessApplication.objects.filter(full_name='{full_name}').delete()"
+    )
 
 
 # ============================================================
@@ -1091,28 +1206,9 @@ def activate_business_locally():
     bookings. There is no API for that, so when testing against a local server
     we flip the flag through manage.py.
     """
-    if "127.0.0.1" not in BASE_URL and "localhost" not in BASE_URL:
-        return False
-
-    manage = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manage.py")
-
-    if not os.path.exists(manage):
-        return False
-
-    import subprocess
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            manage,
-            "shell",
-            "-c",
-            f"from core.models import Business; Business.objects.filter(id={BUSINESS_ID}).update(is_active=True)",
-        ],
-        capture_output=True,
+    return run_django_locally(
+        f"from core.models import Business; Business.objects.filter(id={BUSINESS_ID}).update(is_active=True)"
     )
-
-    return result.returncode == 0
 
 
 def test_booking():
@@ -1942,6 +2038,8 @@ def main():
     test_user_profile()
 
     business_ok = test_business()
+
+    test_business_application()
 
     if business_ok:
 
