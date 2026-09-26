@@ -2,7 +2,7 @@ from ninja import Router
 from ninja.errors import HttpError
 from core.security import JWTAuth
 from core.schemas.business import BusinessCreateSchema, BusinessUpdateSchema, BusinessOutSchema, BusinessListSchema, BusinessStatsOutSchema, BusinessViewOutSchema
-from core.services.business import get_all_businesses, get_business_by_id, create_business, update_business, delete_business, register_business_view
+from core.services.business import get_all_businesses, get_user_businesses, get_business_by_id, create_business, update_business, delete_business, register_business_view
 from core.utils.auth import get_optional_user
 from core.utils.helpers import get_client_ip
 from core.models import User, Business
@@ -25,6 +25,16 @@ def create_business_view(request, payload: BusinessCreateSchema):
 
     business = create_business(user, payload)
     return {"message": "Business created successfully", "business_id": business.id}
+
+
+# Keep above the dynamic /{business_id} route
+@router.get("/my", auth=JWTAuth(), response=List[BusinessOutSchema])
+def my_businesses(request):
+    """
+    Businesses of the current user, newest first, including ones still
+    waiting for admin approval (status "pending").
+    """
+    return get_user_businesses(request.auth)
 
 
 # --- FIXED: MOVED UP ABOVE THE DYNAMIC ID PARAMETER ---

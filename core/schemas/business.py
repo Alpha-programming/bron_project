@@ -2,10 +2,17 @@ from ninja import Schema
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from pydantic import Field, field_validator
-from typing import Optional
+from typing import Literal, Optional
 
 from core.schemas.category import CategoryShortSchema
 from core.utils.helpers import absolute_media_url
+
+BusinessStatus = Literal["approved", "pending"]
+
+
+def _business_status(obj):
+    """New businesses stay inactive until an admin approves them."""
+    return "approved" if obj.is_active else "pending"
 
 
 class SocialLinksSchema(Schema):
@@ -113,9 +120,15 @@ class BusinessListSchema(Schema):
 
     views_count: int
 
+    status: BusinessStatus
+
     @staticmethod
     def resolve_logo(obj, context):
         return absolute_media_url(context["request"], obj.logo)
+
+    @staticmethod
+    def resolve_status(obj):
+        return _business_status(obj)
 
 
 class BusinessOutSchema(Schema):
@@ -123,7 +136,6 @@ class BusinessOutSchema(Schema):
     id: int
 
     owner_id: int
-    owner_username: str
 
     name: str
     description: str | None
@@ -147,7 +159,13 @@ class BusinessOutSchema(Schema):
 
     views_count: int
 
+    status: BusinessStatus
+
     created_at: str
+
+    @staticmethod
+    def resolve_status(obj):
+        return _business_status(obj)
 
     @staticmethod
     def resolve_social_links(obj):
@@ -161,10 +179,6 @@ class BusinessOutSchema(Schema):
     @staticmethod
     def resolve_owner_id(obj):
         return obj.owner.id
-
-    @staticmethod
-    def resolve_owner_username(obj):
-        return obj.owner.username
 
     @staticmethod
     def resolve_created_at(obj):

@@ -18,6 +18,7 @@ Swagger со всеми полями: https://bronofficial.com/api/docs
 | Создание бизнеса | `email`, `owner_name` не было | **обязательные** поля | Добавить в форму заявки |
 | `social_links` бизнеса | любой объект | только `instagram`, `telegram`, `facebook`, `tiktok`, `youtube`, значения — полные URL | Отдельные поля в форме, ссылки с `https://` |
 | Категория в ответах бизнеса | строка `"gym"` | объект `{"id", "name", "slug"}` | Показывать `business.category.name` |
+| `owner_username` в ответах бизнеса | был | **убран** (раскрывал логин владельца) | Свои бизнесы брать из `GET /businesses/my`, `owner_id` остался |
 | Все картинки | `/media/...` | полный URL `https://bronofficial.com/media/...` | Не приклеивать домен вручную |
 | `GET /bookings/{id}` | публичный | нужен токен (клиента брони или владельца бизнеса) | Передавать `Authorization` |
 | `GET /staff/{id}/bookings`, `GET /bookings/staff/{id}` | публичный / любой пользователь | только владелец бизнеса | Передавать токен владельца |
@@ -156,6 +157,19 @@ await api("/businesses/create", {
 
 **Важно:** новый бизнес создаётся **неактивным** и появляется в каталоге, поиске и `business_count` только после одобрения админом. Пока бизнес не одобрен, на него нельзя забронировать (`400 "Business is not accepting bookings yet"`). Владельцу стоит показать статус «Заявка на рассмотрении».
 
+### Мои бизнесы и статус заявки
+
+Бизнесы текущего пользователя, новые первыми, **включая неодобренные**:
+```js
+const mine = await api("/businesses/my", { token }).then(r => r.json());
+// [{ id: 42, name: "Iron Gym", status: "pending", ... }]  — тот же формат, что GET /businesses/{id}
+```
+- `status`: `"pending"` — ждёт одобрения админом, `"approved"` — одобрен и виден в каталоге. Поле приходит во всех ответах бизнеса.
+- Пустой массив — у пользователя нет бизнесов.
+- Без токена — `401`.
+
+Используйте его для кабинета владельца и пункта «Бизнес страница» вместо перебора `GET /businesses/` и `GET /businesses/{id}` с проверкой `owner_id`. Публичный список отдаёт только одобренные бизнесы, поэтому бизнес на рассмотрении так не найти.
+
 ### Шаг 3: логотип и фото
 ```js
 const logo = new FormData(); logo.append("image", logoFile);
@@ -176,7 +190,8 @@ await api(`/business-gallery/upload/${id}`, { method: "POST", token, body: photo
   "category": { "id": 1, "name": "Gym", "slug": "gym" },
   "social_links": { "instagram": "https://...", "telegram": "https://...", "facebook": null, "tiktok": null, "youtube": null },
   "logo": "https://bronofficial.com/media/business_logos/...",
-  "views_count": 15
+  "views_count": 15,
+  "status": "approved"
 }
 ```
 В `social_links` всегда приходят все пять ключей, незаполненные равны `null`. Иконку показывайте только для непустых.
@@ -352,7 +367,7 @@ if (res.status === 409) {
 - [ ] Отображение категории: `business.category.name` вместо строки
 - [ ] Убрать приклеивание домена к картинкам
 - [ ] Обработка `400`/`422` с выводом `detail` (регистрация, заявка, бронь)
-- [ ] Статус «на рассмотрении» для неодобренного бизнеса
+- [ ] Кабинет владельца и «Бизнес страница»: `GET /businesses/my`, статус из поля `status` (`pending` — «на рассмотрении»)
 - [ ] Профиль: поля имени, загрузка аватара
 - [ ] Страница бизнеса: `POST /businesses/{id}/view` при открытии, показ `views_count`
 - [ ] Услуги: фото, `capacity`, экран записи через `available-dates` → `availability` → `bookings/create`

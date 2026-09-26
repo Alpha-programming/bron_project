@@ -21,6 +21,7 @@
 | `POST /api/businesses/create`: полей `email` и `owner_name` не было | **обязательны** (422 без них) |
 | `GET /api/bookings/available-slots` всегда отдавал 09:00–18:00 | берёт реальные часы работы бизнеса; выходной день → пустой список |
 | `social_links` — произвольный словарь | только ключи `instagram`, `telegram`, `facebook`, `tiktok`, `youtube`; значение — полный URL с `http(s)://` |
+| В ответах бизнеса было `owner_username` | поле убрано; свои бизнесы — `GET /api/businesses/my` |
 
 ---
 
@@ -170,9 +171,20 @@ curl -X POST https://bronofficial.com/api/businesses/create \
   "website": "https://irongym.uz",
   "social_links": {"instagram": "https://instagram.com/irongym", "telegram": "https://t.me/irongym", "facebook": null, "tiktok": null, "youtube": null},
   "category": {"id": 1, "name": "Gym", "slug": "gym"},
+  "status": "pending",
   "...": "..."
 }
 ```
+
+`status` приходит во всех ответах бизнеса (в том числе в `GET /api/businesses/`): `"pending"` — ждёт одобрения админом, `"approved"` — одобрен.
+
+### Мои бизнесы
+
+```
+GET /api/businesses/my   (auth)  → [бизнес, ...]
+```
+
+Все бизнесы текущего пользователя, новые первыми, включая неодобренные (`status: "pending"`). Формат элемента — как у `GET /api/businesses/{id}`. Нет бизнесов — `[]`, без токена — `401`.
 
 Обновление: `PUT /api/businesses/{id}` принимает те же поля (все необязательные), например `{"category_id": 2}`. `social_links` заменяется целиком, а не сливается с прежним.
 
