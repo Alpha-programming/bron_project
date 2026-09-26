@@ -10,6 +10,7 @@ class Notification(models.Model):
         ("booking_confirmed", "Booking confirmed"),
         ("booking_rejected", "Booking rejected"),
         ("booking_cancelled", "Booking cancelled"),
+        ("booking_rescheduled", "Booking rescheduled"),
     )
 
     user = models.ForeignKey(

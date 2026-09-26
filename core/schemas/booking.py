@@ -13,6 +13,12 @@ class BookingCreateSchema(Schema):
     guest_count: int = 1
     product_ids: List[int] = []
 
+class BookingRescheduleSchema(Schema):
+    booking_date: date
+    start_time: str  # "HH:MM"
+    end_time: str    # "HH:MM"
+
+
 class BookingUpdateSchema(Schema):
     # Status changes go through /approve, /reject and /cancel only
     staff_id: Optional[int] = None

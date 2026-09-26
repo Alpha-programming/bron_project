@@ -1238,7 +1238,139 @@ def test_booking():
             name="Available booking slots",
         )
 
+    test_booking_reschedule(booking_date)
+
     return True
+
+
+def test_booking_reschedule(booking_date):
+
+    print_section("STEP 10.1 — BOOKING RESCHEDULE")
+
+    response = request(
+        "PATCH",
+        f"/bookings/{BOOKING_ID}/reschedule",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "booking_date": booking_date.isoformat(),
+            "start_time": "12:00",
+            "end_time": "13:00",
+        },
+        expected=(200,),
+        name="Customer reschedules booking",
+    )
+
+    if response is not None and response.status_code == 200:
+        body = response.json()
+        if body.get("start_time") != "12:00:00":
+            print(f"    ⚠️  unexpected start_time after reschedule: {body.get('start_time')}")
+
+    request(
+        "PATCH",
+        f"/bookings/{BOOKING_ID}/reschedule",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "booking_date": (date.today() - timedelta(days=1)).isoformat(),
+            "start_time": "12:00",
+            "end_time": "13:00",
+        },
+        expected=(400,),
+        name="Reschedule to the past rejected",
+    )
+
+    request(
+        "PATCH",
+        f"/bookings/{BOOKING_ID}/reschedule",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "booking_date": booking_date.isoformat(),
+            "start_time": "13:00",
+            "end_time": "12:00",
+        },
+        expected=(400,),
+        name="Reschedule with end before start rejected",
+    )
+
+    request(
+        "PATCH",
+        f"/bookings/{BOOKING_ID}/reschedule",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "booking_date": booking_date.isoformat(),
+            "start_time": "05:00",
+            "end_time": "06:00",
+        },
+        expected=(400,),
+        name="Reschedule outside working hours rejected",
+    )
+
+    # Occupy 14:00 with a second booking, then try to move the first one there
+    blocker = request(
+        "POST",
+        "/bookings/create",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "business_id": BUSINESS_ID,
+            "service_id": SERVICE_ID,
+            "branch_id": BRANCH_ID,
+            "staff_id": STAFF_ID,
+            "booking_date": booking_date.isoformat(),
+            "start_time": "14:00",
+            "end_time": "15:00",
+            "guest_count": 1,
+            "product_ids": [],
+        },
+        expected=(200,),
+        name="Second booking occupies 14:00",
+    )
+
+    request(
+        "PATCH",
+        f"/bookings/{BOOKING_ID}/reschedule",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "booking_date": booking_date.isoformat(),
+            "start_time": "14:00",
+            "end_time": "15:00",
+        },
+        expected=(409,),
+        name="Reschedule into taken slot -> 409",
+    )
+
+    if blocker is not None and blocker.status_code == 200:
+        request(
+            "PATCH",
+            f"/bookings/{blocker.json()['id']}/cancel",
+            headers=CUSTOMER_HEADERS,
+            expected=(200,),
+            name="Cancel second booking",
+        )
+
+    request(
+        "PATCH",
+        f"/bookings/{BOOKING_ID}/reschedule",
+        expected=(401,),
+        json={
+            "booking_date": booking_date.isoformat(),
+            "start_time": "10:00",
+            "end_time": "11:00",
+        },
+        name="Reschedule without token rejected",
+    )
+
+    # Move back so the later steps work with the original time
+    request(
+        "PATCH",
+        f"/bookings/{BOOKING_ID}/reschedule",
+        headers=OWNER_HEADERS,
+        json={
+            "booking_date": booking_date.isoformat(),
+            "start_time": "10:00",
+            "end_time": "11:00",
+        },
+        expected=(200,),
+        name="Owner reschedules booking back",
+    )
 
 
 # ============================================================

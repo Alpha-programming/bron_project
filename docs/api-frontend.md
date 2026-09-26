@@ -254,6 +254,8 @@ DELETE /api/notifications/{id}
 | Владелец отклонил (`PATCH /bookings/{id}/reject`) | клиенту | `booking_rejected` |
 | Клиент отменил (`PATCH /bookings/{id}/cancel`) | владельцу | `booking_cancelled` |
 | Владелец отменил (`PATCH /bookings/{id}/cancel`) | клиенту | `booking_cancelled` |
+| Клиент перенёс (`PATCH /bookings/{id}/reschedule`) | владельцу | `booking_rescheduled` |
+| Владелец перенёс (`PATCH /bookings/{id}/reschedule`) | клиенту | `booking_rescheduled` |
 
 Push/Telegram-рассылки пока нет — фронт опрашивает `unread-count`.
 
@@ -334,6 +336,28 @@ GET /api/services/{service_id}/available-dates?days=14[&staff_id=5]
 - товары (`product_ids`) чужого бизнеса молча не добавляются
 
 `PUT /api/bookings/{id}` — только для `pending` брони, и только `staff_id`.
+
+---
+
+### Перенос брони
+
+```
+PATCH /api/bookings/{booking_id}/reschedule     (auth: клиент брони или владелец бизнеса)
+```
+```json
+{ "booking_date": "2026-10-05", "start_time": "12:00", "end_time": "13:00" }
+```
+
+- `200` — обновлённая бронь (тот же формат, что `GET /bookings/{id}`).
+- `409` — новое время занято: `"Selected time is not available: only 0 places left"` или `"... staff member is busy"`. Покажите сообщение и перезапросите `GET /services/{service_id}/availability?date=...`.
+- `400` — время в прошлом, `end_time` ≤ `start_time`, неверный формат, дата заблокирована, бизнес в этот день не работает, время вне часов работы, бронь уже на этом времени, статус не `pending`/`confirmed`.
+- `403` — чужая бронь; `401` — без токена.
+
+Правила:
+- Переносить можно только брони в статусе `pending` или `confirmed`.
+- Если **клиент** переносит **подтверждённую** бронь, она возвращается в `pending` и владелец должен подтвердить её заново. Перенос владельцем статус не меняет.
+- Другая сторона получает уведомление `booking_rescheduled`.
+- Время выбирайте из `availability` услуги. Сама бронь при проверке не считается занятой, поэтому можно сдвинуть её внутри своего же слота.
 
 ---
 
