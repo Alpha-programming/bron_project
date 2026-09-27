@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 from core.models import (
     User,
@@ -54,8 +55,25 @@ class ProductsInline(admin.TabularInline):
     extra = 1
 
 
+# Django's UserAdmin hashes passwords. A plain ModelAdmin saved them as raw
+# text, so accounts created in the admin could never log in.
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(BaseUserAdmin):
+    fieldsets = BaseUserAdmin.fieldsets + (
+        ("BRON", {"fields": ("phone", "role", "telegram_id", "avatar", "language", "is_verified")}),
+    )
+
+    # email and phone are unique, so the add form must ask for them
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "email", "phone", "role", "usable_password", "password1", "password2"),
+            },
+        ),
+    )
+
     list_display = (
         "id",
         "username",
