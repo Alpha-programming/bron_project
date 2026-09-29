@@ -1,4 +1,5 @@
 from ninja import Schema
+from pydantic import Field
 
 from core.utils.helpers import absolute_media_url
 
@@ -9,9 +10,20 @@ class BusinessGalleryOutSchema(Schema):
 
     business_id: int
 
-    image: str
+    image: str = Field(
+        ...,
+        description="Absolute URL of the picture",
+    )
 
-    created_at: str
+    sort_order: int = Field(
+        ...,
+        description="Display position: lower comes first, ties go by id",
+    )
+
+    created_at: str = Field(
+        ...,
+        description="Upload time, YYYY-MM-DD HH:MM:SS",
+    )
 
     @staticmethod
     def resolve_image(obj, context):

@@ -1,3 +1,4 @@
+from django.http.request import RawPostDataException
 from ninja import NinjaAPI
 
 from core.routes.auth import router as auth_router
@@ -22,6 +23,18 @@ api = NinjaAPI(
     title="Iron API",
     version="1.0.0",
 )
+
+
+@api.exception_handler(RawPostDataException)
+def body_already_read(request, exc):
+    # fix_request_files_middleware (and OAuth2TokenMiddleware for POST) parse
+    # a form/multipart body into request.POST before the view runs, so a JSON
+    # endpoint can no longer read request.body: a client error, not a 500
+    return api.create_response(
+        request,
+        {"detail": "Request body must be JSON"},
+        status=400,
+    )
 
 api.add_router(
     "/auth/",

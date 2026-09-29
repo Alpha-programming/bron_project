@@ -14,8 +14,10 @@ router = Router(tags=["Categories"])
 @router.get("/", response=List[CategoryOutSchema])
 def category_list(request):
     """
-    Active categories with the number of approved businesses in each.
-    Categories are managed in the admin panel.
+    Active categories with the number of approved businesses in each,
+    ordered by `order`, then name. Categories are managed in the admin panel.
+    Includes the catch-all category "Other" (slug `other`, placed last) for
+    businesses that fit no other category.
     """
     return get_active_categories()
 

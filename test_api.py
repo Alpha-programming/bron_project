@@ -1,8 +1,10 @@
+import base64
 import os
 import requests
 import sys
 import uuid
 from datetime import date, timedelta
+from io import BytesIO
 
 
 # ============================================================
@@ -17,6 +19,12 @@ BASE_URL = os.getenv("BRON_API_URL", "http://127.0.0.1:8001/api")
 
 TIMEOUT = 15
 RUN_ID = uuid.uuid4().hex[:8]
+
+# The report uses emoji; a redirected stdout on Windows defaults to a legacy
+# code page that can't encode them
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 # ============================================================
@@ -39,9 +47,21 @@ PRODUCT_ID = None
 STAFF_ID = None
 
 BOOKING_ID = None
+BOOKING_DATE = date.today() + timedelta(days=7)
+BUSINESS_ACTIVE = False
+
+# Second service of the business with its own schedule (availability)
+SCHEDULED_SERVICE_ID = None
+
+# Objects of another business (owned by the customer), used to check that
+# foreign ids are rejected
+FOREIGN = {}
+
+OTHER_CATEGORY_ID = None
 
 WORKING_HOURS_ID = None
 BLOCKED_DATE_ID = None
+BLOCKED_DATE = date.today() + timedelta(days=30)
 
 BUSINESS_REVIEW_ID = None
 CUSTOMER_REVIEW_ID = None
@@ -80,9 +100,17 @@ def request(
     headers=None,
     json=None,
     params=None,
+    files=None,
+    data=None,
     expected=(200,),
     name=None,
 ):
+    """
+    Sends one counted request. `json` is the usual body; `files` (and
+    optionally `data`) send multipart/form-data instead, e.g.
+    files={"image": ("a.png", png_bytes, "image/png")}. A plain form field
+    goes as files={"sort_order": (None, "3")} so the body stays multipart.
+    """
     global PASSED, FAILED
 
     url = f"{BASE_URL}{endpoint}"
@@ -94,6 +122,8 @@ def request(
             headers=headers,
             json=json,
             params=params,
+            files=files,
+            data=data,
             timeout=TIMEOUT,
         )
 
@@ -139,6 +169,94 @@ def skip_test(name, reason):
         f"⚠️ SKIP   {name:<55} "
         f"{reason}"
     )
+
+
+def check(name, condition, details=None):
+    """
+    Counted assertion on response content: a wrong body is a failure just
+    like a wrong status code.
+    """
+    global PASSED, FAILED
+
+    if condition:
+        PASSED += 1
+        print(f"✅ {'CHECK':6} {name}")
+    else:
+        FAILED += 1
+        print(f"❌ {'CHECK':6} {name}")
+        if details is not None:
+            print(f"    Got: {details}")
+
+    return bool(condition)
+
+
+def is_ok(response, status=200):
+    return response is not None and response.status_code == status
+
+
+def detail_of(response):
+    body = get_json(response)
+    return body.get("detail") if isinstance(body, dict) else None
+
+
+def check_detail(name, response, expected_detail):
+    """Checks the {"detail": ...} message of an error response."""
+    if response is None:
+        return False
+    return check(name, detail_of(response) == expected_detail, detail_of(response))
+
+
+def raw(method, endpoint, **kwargs):
+    """Uncounted request for bulk setup/cleanup; None on connection error."""
+    try:
+        return requests.request(method, f"{BASE_URL}{endpoint}", timeout=TIMEOUT, **kwargs)
+    except requests.RequestException:
+        return None
+
+
+# 1x1 PNG, used only when Pillow is not installed
+FALLBACK_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+IMAGE_TYPES = {
+    "PNG": ("png", "image/png"),
+    "JPEG": ("jpg", "image/jpeg"),
+    "WEBP": ("webp", "image/webp"),
+}
+
+
+def make_image(color="red", fmt="PNG"):
+    try:
+        from PIL import Image
+    except ImportError:
+        return FALLBACK_PNG, "PNG"
+
+    buffer = BytesIO()
+    Image.new("RGB", (16, 16), color).save(buffer, format=fmt)
+    return buffer.getvalue(), fmt
+
+
+def image_upload(color="red", fmt="PNG", field="image"):
+    """files= payload with one small generated picture."""
+    content, fmt = make_image(color, fmt)
+    ext, mime = IMAGE_TYPES[fmt]
+    label = "".join(ch for ch in str(color) if ch.isalnum())
+    return {field: (f"bron_{RUN_ID}_{label}.{ext}", content, mime)}
+
+
+def is_absolute_url(value):
+    return isinstance(value, str) and value.startswith(("http://", "https://"))
+
+
+def media_status(url):
+    """Status code of GET on a media URL, None when it can't be fetched."""
+    if not is_absolute_url(url):
+        return None
+    try:
+        return requests.get(url, timeout=TIMEOUT).status_code
+    except requests.RequestException:
+        return None
 
 
 def get_json(response):
@@ -490,6 +608,169 @@ def test_user_profile():
 
 
 # ============================================================
+# STEP 2.1 — NOTIFICATION SETTINGS
+# ============================================================
+
+NOTIFICATION_DEFAULTS = {
+    "push": True,
+    "email": True,
+    "bookingReminder": True,
+    "promotions": False,
+}
+
+
+def test_notification_settings():
+
+    print_section("STEP 2.1 — NOTIFICATION SETTINGS")
+
+    response = request(
+        "GET",
+        "/users/profile/notifications",
+        headers=CUSTOMER_HEADERS,
+        expected=(200,),
+        name="Notification settings (defaults)",
+    )
+
+    if is_ok(response):
+        check(
+            "New account: push/email/bookingReminder on, promotions off",
+            response.json() == NOTIFICATION_DEFAULTS,
+            response.json(),
+        )
+
+    response = request(
+        "PUT",
+        "/users/profile/notifications",
+        headers=CUSTOMER_HEADERS,
+        json={"promotions": True},
+        expected=(200,),
+        name="Enable promotions only (partial PUT)",
+    )
+
+    if is_ok(response):
+        check(
+            "Partial PUT changes only promotions",
+            response.json() == {**NOTIFICATION_DEFAULTS, "promotions": True},
+            response.json(),
+        )
+
+    response = request(
+        "PUT",
+        "/users/profile/notifications",
+        headers=CUSTOMER_HEADERS,
+        json={"push": False, "email": None},
+        expected=(200,),
+        name="Disable push, email=null keeps value",
+    )
+
+    expected_settings = {
+        "push": False,
+        "email": True,
+        "bookingReminder": True,
+        "promotions": True,
+    }
+
+    if is_ok(response):
+        check(
+            "push off, null email kept, promotions still on",
+            response.json() == expected_settings,
+            response.json(),
+        )
+
+    response = request(
+        "GET",
+        "/users/profile/notifications",
+        headers=CUSTOMER_HEADERS,
+        expected=(200,),
+        name="Notification settings persisted",
+    )
+
+    if is_ok(response):
+        check(
+            "GET returns the saved settings",
+            response.json() == expected_settings,
+            response.json(),
+        )
+
+    response = request(
+        "GET",
+        "/users/profile/notifications",
+        headers=OWNER_HEADERS,
+        expected=(200,),
+        name="Owner settings unaffected",
+    )
+
+    if is_ok(response):
+        check(
+            "Another user still has the defaults",
+            response.json() == NOTIFICATION_DEFAULTS,
+            response.json(),
+        )
+
+    request(
+        "PUT",
+        "/users/profile/notifications",
+        headers=CUSTOMER_HEADERS,
+        json={"push": "maybe"},
+        expected=(422,),
+        name="Non-boolean setting rejected",
+    )
+
+    request(
+        "GET",
+        "/users/profile/notifications",
+        expected=(401,),
+        name="Settings without token rejected",
+    )
+
+    request(
+        "PUT",
+        "/users/profile/notifications",
+        json={"push": True},
+        expected=(401,),
+        name="Settings update without token rejected",
+    )
+
+
+# ============================================================
+# STEP 2.2 — CATEGORIES
+# ============================================================
+
+def test_categories():
+
+    global OTHER_CATEGORY_ID
+
+    print_section("STEP 2.2 — CATEGORIES")
+
+    response = request(
+        "GET",
+        "/categories/",
+        expected=(200,),
+        name="Category list",
+    )
+
+    if is_ok(response):
+        categories = response.json()
+        slugs = [c.get("slug") for c in categories]
+        other = next((c for c in categories if c.get("slug") == "other"), None)
+
+        check('Category "other" is listed', other is not None, slugs)
+
+        if other is not None:
+            OTHER_CATEGORY_ID = other.get("id")
+            check('"other" is named "Other"', other.get("name") == "Other", other)
+            if slugs[-1] != "other":
+                print(f"    ⚠️  \"other\" is not the last category: {slugs}")
+
+    request(
+        "GET",
+        "/categories/other",
+        expected=(200,),
+        name="Category detail: other",
+    )
+
+
+# ============================================================
 # STEP 3 — BUSINESS
 # ============================================================
 
@@ -614,35 +895,45 @@ def test_business():
         name="Business search",
     )
 
-    view = request(
-        "POST",
-        f"/businesses/{BUSINESS_ID}/view",
-        headers=CUSTOMER_HEADERS,
-        expected=(200,),
-        name="Business view (customer, first)",
-    )
-    if view is not None and view.status_code == 200 and not view.json().get("counted"):
-        print("    ⚠️  first customer view was not counted")
+    # Every request is a view now: no 24h dedup, the owner counts too
+    views = []
 
-    view = request(
-        "POST",
-        f"/businesses/{BUSINESS_ID}/view",
-        headers=CUSTOMER_HEADERS,
-        expected=(200,),
-        name="Business view (customer, repeat)",
-    )
-    if view is not None and view.status_code == 200 and view.json().get("counted"):
-        print("    ⚠️  repeat customer view was counted twice")
+    for headers, label in (
+        (CUSTOMER_HEADERS, "customer, first"),
+        (CUSTOMER_HEADERS, "customer, repeat"),
+        (OWNER_HEADERS, "owner"),
+        (None, "anonymous"),
+    ):
+        view = request(
+            "POST",
+            f"/businesses/{BUSINESS_ID}/view",
+            headers=headers,
+            expected=(200,),
+            name=f"Business view ({label})",
+        )
 
-    view = request(
+        if not is_ok(view):
+            views = None
+            continue
+
+        body = view.json()
+        check(f"View ({label}) is counted", body.get("counted") is True, body)
+
+        if views is not None:
+            expected_count = views[-1] + 1 if views else 1
+            check(
+                f"views_count is {expected_count} after the {label} view",
+                body.get("views_count") == expected_count,
+                body,
+            )
+            views.append(body.get("views_count"))
+
+    request(
         "POST",
-        f"/businesses/{BUSINESS_ID}/view",
-        headers=OWNER_HEADERS,
-        expected=(200,),
-        name="Business view (owner, ignored)",
+        "/businesses/999999999/view",
+        expected=(404,),
+        name="View of unknown business -> 404",
     )
-    if view is not None and view.status_code == 200 and view.json().get("counted"):
-        print("    ⚠️  owner view was counted")
 
     request(
         "GET",
@@ -651,13 +942,20 @@ def test_business():
         name="Business category",
     )
 
-    request(
+    response = request(
         "GET",
         f"/businesses/{BUSINESS_ID}/stats",
         headers=OWNER_HEADERS,
         expected=(200,),
         name="Business stats",
     )
+
+    if is_ok(response) and views:
+        check(
+            f"Stats views_count equals {views[-1]} (all views counted)",
+            response.json().get("views_count") == views[-1],
+            response.json(),
+        )
 
     request(
         "GET",
@@ -877,6 +1175,12 @@ def test_services():
             f"    SERVICE_ID = {SERVICE_ID}"
         )
 
+        check(
+            "Service without schedule has availability []",
+            get_json(response).get("availability") == [],
+            get_json(response).get("availability"),
+        )
+
         request(
             "GET",
             f"/services/{SERVICE_ID}",
@@ -886,6 +1190,47 @@ def test_services():
 
     else:
         print_response_body(response)
+
+    # --------------------------------------------------------
+    # AVAILABILITY FORMAT VALIDATION
+    # --------------------------------------------------------
+
+    day = BOOKING_DATE.isoformat()
+
+    for availability, label in (
+        ([{"date": BOOKING_DATE.strftime("%Y/%m/%d"), "times": ["10:00"]}], "date not YYYY-MM-DD"),
+        ([{"date": day, "times": ["7:00"]}], "time not HH:MM"),
+        ([{"date": day, "times": ["24:00"]}], "time 24:00"),
+        ([{"date": day, "times": ["10:00"]}, {"date": day, "times": ["11:00"]}], "same date twice"),
+        ([{"date": day}], "entry without times"),
+    ):
+        request(
+            "POST",
+            "/services/create",
+            headers=OWNER_HEADERS,
+            json={**payload, "availability": availability},
+            expected=(422,),
+            name=f"Availability rejected: {label}",
+        )
+
+    response = request(
+        "POST",
+        "/services/create",
+        headers=OWNER_HEADERS,
+        json={
+            **payload,
+            "duration": 45,
+            "availability": [{"date": day, "times": ["23:30"]}],
+        },
+        expected=(400,),
+        name="Availability slot ending after 23:59 -> 400",
+    )
+
+    check_detail(
+        "23:59 error message",
+        response,
+        f"Slot at 23:30 on {day} would end after 23:59",
+    )
 
     request(
         "GET",
@@ -998,6 +1343,223 @@ def test_products():
     )
 
     return PRODUCT_ID is not None
+
+
+# ============================================================
+# STEP 6.1 — PRODUCT PHOTO
+# ============================================================
+
+def find_by_id(items, obj_id):
+    if not isinstance(items, list):
+        return None
+    return next((i for i in items if isinstance(i, dict) and i.get("id") == obj_id), None)
+
+
+def test_product_image():
+
+    print_section("STEP 6.1 — PRODUCT PHOTO")
+
+    if not PRODUCT_ID:
+
+        skip_test(
+            "Product photo",
+            "PRODUCT_ID unavailable"
+        )
+
+        return
+
+    endpoint = f"/products/{PRODUCT_ID}/image"
+
+    response = request(
+        "POST",
+        endpoint,
+        headers=OWNER_HEADERS,
+        files=image_upload("red", "PNG"),
+        expected=(200,),
+        name="Owner uploads product photo (PNG)",
+    )
+
+    first_url = get_json(response).get("image")
+
+    if is_ok(response):
+        check(
+            "Product image is an absolute /media/ URL",
+            is_absolute_url(first_url) and "/media/" in first_url,
+            first_url,
+        )
+        check(
+            "Uploaded photo is served",
+            media_status(first_url) == 200,
+            media_status(first_url),
+        )
+
+    response = request(
+        "GET",
+        f"/products/{PRODUCT_ID}",
+        expected=(200,),
+        name="Product detail with photo",
+    )
+
+    if is_ok(response):
+        check(
+            "Detail returns the same absolute URL",
+            response.json().get("image") == first_url,
+            response.json().get("image"),
+        )
+
+    for endpoint_list, label in (
+        (f"/products/business/{BUSINESS_ID}", "Business products"),
+        ("/products/", "Product list"),
+    ):
+        response = request(
+            "GET",
+            endpoint_list,
+            expected=(200,),
+            name=f"{label} with photo",
+        )
+
+        if is_ok(response):
+            item = find_by_id(response.json(), PRODUCT_ID)
+            check(
+                f"{label}: image is absolute",
+                item is not None and item.get("image") == first_url,
+                item,
+            )
+
+    response = request(
+        "POST",
+        endpoint,
+        headers=OWNER_HEADERS,
+        files=image_upload("blue", "JPEG"),
+        expected=(200,),
+        name="Owner replaces photo (JPEG)",
+    )
+
+    second_url = get_json(response).get("image")
+
+    if is_ok(response):
+        check(
+            "Replaced photo has a new URL",
+            is_absolute_url(second_url) and second_url != first_url,
+            second_url,
+        )
+        check(
+            "Old photo file was deleted",
+            media_status(first_url) == 404,
+            media_status(first_url),
+        )
+
+    request(
+        "POST",
+        endpoint,
+        headers=OWNER_HEADERS,
+        files=image_upload("green", "WEBP"),
+        expected=(200,),
+        name="Owner uploads WEBP photo",
+    )
+
+    request(
+        "POST",
+        endpoint,
+        headers=CUSTOMER_HEADERS,
+        files=image_upload("red", "PNG"),
+        expected=(403,),
+        name="Customer cannot upload product photo",
+    )
+
+    request(
+        "POST",
+        endpoint,
+        files=image_upload("red", "PNG"),
+        expected=(401,),
+        name="Photo upload without token rejected",
+    )
+
+    response = request(
+        "POST",
+        endpoint,
+        headers=OWNER_HEADERS,
+        files={"image": ("notes.txt", b"not an image", "text/plain")},
+        expected=(400,),
+        name="Non-image file rejected",
+    )
+
+    check_detail(
+        "Wrong type message",
+        response,
+        "Only JPEG, PNG or WEBP images are allowed",
+    )
+
+    response = request(
+        "POST",
+        endpoint,
+        headers=OWNER_HEADERS,
+        files={"image": ("big.png", b"\0" * (5 * 1024 * 1024 + 1), "image/png")},
+        expected=(400,),
+        name="Photo over 5 MB rejected",
+    )
+
+    check_detail(
+        "Too large message",
+        response,
+        "Image must be smaller than 5 MB",
+    )
+
+    request(
+        "POST",
+        endpoint,
+        headers=OWNER_HEADERS,
+        files=image_upload("red", "PNG", field="photo"),
+        expected=(422,),
+        name="Upload without image field rejected",
+    )
+
+    request(
+        "POST",
+        "/products/999999999/image",
+        headers=OWNER_HEADERS,
+        files=image_upload("red", "PNG"),
+        expected=(404,),
+        name="Photo for unknown product -> 404",
+    )
+
+    request(
+        "DELETE",
+        endpoint,
+        headers=CUSTOMER_HEADERS,
+        expected=(403,),
+        name="Customer cannot delete product photo",
+    )
+
+    current = get_json(raw("GET", f"/products/{PRODUCT_ID}")).get("image")
+
+    response = request(
+        "DELETE",
+        endpoint,
+        headers=OWNER_HEADERS,
+        expected=(200,),
+        name="Owner deletes product photo",
+    )
+
+    if is_ok(response):
+        check(
+            "Product image is null after delete",
+            response.json().get("image") is None,
+            response.json().get("image"),
+        )
+        check(
+            "Deleted photo file is gone",
+            media_status(current) == 404,
+            media_status(current),
+        )
+
+    request(
+        "DELETE",
+        endpoint,
+        headers=OWNER_HEADERS,
+        expected=(200,),
+        name="Deleting a missing photo is safe",
+    )
 
 
 # ============================================================
@@ -1176,10 +1738,7 @@ def test_blocked_dates():
 
         return
 
-    blocked_date = (
-        date.today()
-        + timedelta(days=30)
-    )
+    blocked_date = BLOCKED_DATE
 
     payload = {
         "business_id": BUSINESS_ID,
@@ -1213,6 +1772,72 @@ def test_blocked_dates():
         name="Business blocked dates",
     )
 
+    response = request(
+        "GET",
+        "/blocked-dates/check",
+        params={
+            "business_id": BUSINESS_ID,
+            "date": blocked_date.isoformat(),
+        },
+        expected=(200,),
+        name="Check blocked date",
+    )
+
+    if is_ok(response):
+        check(
+            "Blocked date: is_blocked true with reason",
+            response.json() == {
+                "business_id": BUSINESS_ID,
+                "date": blocked_date.isoformat(),
+                "is_blocked": True,
+                "reason": "Automated API testing block",
+            },
+            response.json(),
+        )
+
+    free_date = blocked_date + timedelta(days=1)
+
+    response = request(
+        "GET",
+        "/blocked-dates/check",
+        params={
+            "business_id": BUSINESS_ID,
+            "date": free_date.isoformat(),
+        },
+        expected=(200,),
+        name="Check free date",
+    )
+
+    if is_ok(response):
+        check(
+            "Free date: is_blocked false, reason null",
+            response.json() == {
+                "business_id": BUSINESS_ID,
+                "date": free_date.isoformat(),
+                "is_blocked": False,
+                "reason": None,
+            },
+            response.json(),
+        )
+
+    response = request(
+        "GET",
+        "/blocked-dates/check",
+        params={
+            "business_id": 999999999,
+            "date": blocked_date.isoformat(),
+        },
+        expected=(200,),
+        name="Check date of unknown business",
+    )
+
+    if is_ok(response):
+        check(
+            "Unknown business: is_blocked false",
+            response.json().get("is_blocked") is False,
+            response.json(),
+        )
+
     request(
         "GET",
         "/blocked-dates/check",
@@ -1220,8 +1845,19 @@ def test_blocked_dates():
             "business_id": BUSINESS_ID,
             "target_date": blocked_date.isoformat(),
         },
-        expected=(200,),
-        name="Check blocked date",
+        expected=(422,),
+        name="Old target_date parameter rejected",
+    )
+
+    request(
+        "GET",
+        "/blocked-dates/check",
+        params={
+            "business_id": BUSINESS_ID,
+            "date": "2026-13-01",
+        },
+        expected=(422,),
+        name="Malformed date rejected",
     )
 
     if BLOCKED_DATE_ID:
@@ -1249,9 +1885,152 @@ def activate_business_locally():
     )
 
 
+SERVICE_TITLE = "BRON Test Service"
+SERVICE_PRICE = 350000.0
+PRODUCT_NAME = "BRON Test Product"
+PRODUCT_PRICE = 95000.0
+
+
+def order_lines(body):
+    """{(kind, id): (name, price, quantity)} from the items of a booking."""
+    items = body.get("items") if isinstance(body, dict) else None
+
+    if not isinstance(items, list):
+        return None
+
+    return {
+        (item.get("kind"), item.get("id")): (item.get("name"), item.get("price"), item.get("quantity"))
+        for item in items
+    }
+
+
+def check_order(label, body, expected_lines, expected_total):
+    """Items and total_price of a booking body, priced by the server."""
+    lines = order_lines(body)
+    items = body.get("items") if isinstance(body, dict) else None
+
+    check(
+        f"{label}: items",
+        lines == expected_lines and len(items or []) == len(expected_lines),
+        items,
+    )
+
+    check(
+        f"{label}: total_price {expected_total:.2f}",
+        isinstance(body, dict) and body.get("total_price") == expected_total,
+        body.get("total_price") if isinstance(body, dict) else body,
+    )
+
+
+def main_order_lines(product_quantity):
+    lines = {("service", SERVICE_ID): (SERVICE_TITLE, SERVICE_PRICE, 1)}
+
+    if product_quantity:
+        lines[("product", PRODUCT_ID)] = (PRODUCT_NAME, PRODUCT_PRICE, product_quantity)
+
+    return lines
+
+
+def cancel_booking(booking_id, name):
+    if booking_id:
+        request(
+            "PATCH",
+            f"/bookings/{booking_id}/cancel",
+            headers=CUSTOMER_HEADERS,
+            expected=(200,),
+            name=name,
+        )
+
+
+def create_foreign_business():
+    """
+    A second business owned by the customer (category "other") with a
+    branch, service, product and staff member. Its ids must be rejected
+    together with BUSINESS_ID.
+    """
+    if FOREIGN:
+        return all(FOREIGN.values())
+
+    response = request(
+        "POST",
+        "/businesses/create",
+        headers=CUSTOMER_HEADERS,
+        json={
+            "name": f"BRON Foreign Business {RUN_ID}",
+            "description": "Second business for foreign-id checks.",
+            "category_id": OTHER_CATEGORY_ID or 1,
+            "address": "Samarkand",
+            "phone": f"+99897{RUN_ID[:7]}",
+            "email": f"foreign{RUN_ID}@example.com",
+            "owner_name": "Foreign Owner",
+        },
+        expected=(200, 201),
+        name="Foreign business (customer-owned)",
+    )
+
+    FOREIGN["business_id"] = get_id(response)
+
+    if not FOREIGN["business_id"]:
+        return False
+
+    if OTHER_CATEGORY_ID:
+        # /businesses/create returns only the id
+        detail = get_json(raw("GET", f"/businesses/{FOREIGN['business_id']}"))
+        category = detail.get("category") or {}
+        check(
+            'Business can use category "other"',
+            category.get("slug") == "other",
+            category,
+        )
+
+    business_id = FOREIGN["business_id"]
+
+    for key, endpoint, payload in (
+        ("branch_id", "/branches/create", {
+            "business_id": business_id,
+            "name": "Foreign Branch",
+            "address": "Samarkand",
+            "phone": f"+99898{RUN_ID[:7]}",
+        }),
+        ("service_id", "/services/create", {
+            "business_id": business_id,
+            "title": "Foreign Service",
+            "description": "Foreign service",
+            "category": "Diagnostics",
+            "duration": 60,
+            "price": "1000.00",
+        }),
+        ("product_id", "/products/create", {
+            "business_id": business_id,
+            "name": "Foreign Product",
+            # Omitting description gives 500 (NOT NULL in the model)
+            "description": "Foreign product",
+            "price": "1000.00",
+        }),
+        ("staff_id", "/staff/create", {
+            "business_id": business_id,
+            "full_name": "Foreign Employee",
+            "position": "Specialist",
+            "phone": f"+99899{RUN_ID[:7]}",
+        }),
+    ):
+        response = request(
+            "POST",
+            endpoint,
+            headers=CUSTOMER_HEADERS,
+            json=payload,
+            expected=(200, 201),
+            name=f"Foreign {key[:-3]}",
+        )
+
+        FOREIGN[key] = get_id(response)
+
+    return all(FOREIGN.values())
+
+
 def test_booking():
 
-    global BOOKING_ID
+    global BOOKING_ID, BUSINESS_ACTIVE
 
     print_section("STEP 10 — BOOKINGS")
 
@@ -1268,6 +2047,34 @@ def test_booking():
 
         return False
 
+    booking_date = BOOKING_DATE
+
+    slots_params = {
+        "business_id": BUSINESS_ID,
+        "service_id": SERVICE_ID,
+        "branch_id": BRANCH_ID,
+        "date": booking_date.isoformat(),
+    }
+
+    # --------------------------------------------------------
+    # NOT APPROVED YET: NO SLOTS
+    # --------------------------------------------------------
+
+    response = request(
+        "GET",
+        "/bookings/available-slots",
+        params=slots_params,
+        expected=(200,),
+        name="Available slots (business not approved)",
+    )
+
+    if is_ok(response):
+        check(
+            "Not approved business has no slots",
+            response.json().get("slots") == [],
+            response.json(),
+        )
+
     if not activate_business_locally():
 
         skip_test(
@@ -1276,6 +2083,8 @@ def test_booking():
         )
 
         return False
+
+    BUSINESS_ACTIVE = True
 
     response = request(
         "GET",
@@ -1290,10 +2099,14 @@ def test_booking():
         if mine.get(BUSINESS_ID) != "approved":
             print(f"    ⚠️  approved business has status {mine.get(BUSINESS_ID)!r}")
 
-    booking_date = (
-        date.today()
-        + timedelta(days=7)
-    )
+    create_foreign_business()
+
+    # --------------------------------------------------------
+    # BOOKING WITH ITEMS
+    # name/price sent by the client must be ignored
+    # --------------------------------------------------------
+
+    product_quantity = 2 if PRODUCT_ID else 0
 
     payload = {
         "business_id": BUSINESS_ID,
@@ -1304,8 +2117,14 @@ def test_booking():
         "start_time": "10:00:00",
         "end_time": "11:00:00",
         "guest_count": 1,
-        "product_ids": (
-            [PRODUCT_ID]
+        "items": (
+            [{
+                "id": PRODUCT_ID,
+                "kind": "product",
+                "quantity": 2,
+                "name": "Free product",
+                "price": "1.00",
+            }]
             if PRODUCT_ID
             else []
         ),
@@ -1317,7 +2136,7 @@ def test_booking():
         headers=CUSTOMER_HEADERS,
         json=payload,
         expected=(200, 201),
-        name="Customer creates booking",
+        name="Customer creates booking (product x2, fake price)",
     )
 
     BOOKING_ID = get_id(
@@ -1339,7 +2158,12 @@ def test_booking():
         f"    BOOKING_ID = {BOOKING_ID}"
     )
 
-    request(
+    expected_lines = main_order_lines(product_quantity)
+    expected_total = SERVICE_PRICE + PRODUCT_PRICE * product_quantity
+
+    check_order("Created booking", get_json(response), expected_lines, expected_total)
+
+    response = request(
         "GET",
         "/bookings/my",
         headers=CUSTOMER_HEADERS,
@@ -1347,7 +2171,15 @@ def test_booking():
         name="Customer booking list",
     )
 
-    request(
+    if is_ok(response):
+        check_order(
+            "My bookings",
+            find_by_id(response.json(), BOOKING_ID) or {},
+            expected_lines,
+            expected_total,
+        )
+
+    response = request(
         "GET",
         f"/bookings/{BOOKING_ID}",
         headers=CUSTOMER_HEADERS,
@@ -1355,13 +2187,24 @@ def test_booking():
         name="Booking detail",
     )
 
-    request(
+    if is_ok(response):
+        check_order("Booking detail", response.json(), expected_lines, expected_total)
+
+    response = request(
         "GET",
         f"/bookings/business/{BUSINESS_ID}",
         headers=OWNER_HEADERS,
         expected=(200,),
         name="Business bookings",
     )
+
+    if is_ok(response):
+        check_order(
+            "Business bookings",
+            find_by_id(response.json(), BOOKING_ID) or {},
+            expected_lines,
+            expected_total,
+        )
 
     if STAFF_ID:
 
@@ -1373,26 +2216,349 @@ def test_booking():
             name="Staff booking list",
         )
 
-        request(
-            "GET",
-            "/bookings/available-slots",
-            params={
-                "business_id": BUSINESS_ID,
-                "staff_id": STAFF_ID,
-                "target_date": booking_date.isoformat(),
-            },
-            expected=(200,),
-            name="Available booking slots",
-        )
+    test_available_slots(slots_params)
+
+    test_booking_items()
 
     test_booking_reschedule(booking_date)
 
     return True
 
 
+def test_available_slots(slots_params):
+
+    print_section("STEP 10.0 — AVAILABLE SLOTS")
+
+    # Working hours 08:00-22:00 and a 60-minute service: 14 hourly slots,
+    # 10:00 is taken by the booking above (capacity 1)
+    hourly = [f"{hour:02d}:00" for hour in range(8, 22)]
+
+    for staff_id, label in ((None, "any staff"), (STAFF_ID, "with staff_id")):
+
+        if label == "with staff_id" and not STAFF_ID:
+            continue
+
+        params = dict(slots_params)
+        if staff_id:
+            params["staff_id"] = staff_id
+
+        response = request(
+            "GET",
+            "/bookings/available-slots",
+            params=params,
+            expected=(200,),
+            name=f"Available slots ({label})",
+        )
+
+        if not is_ok(response):
+            continue
+
+        body = response.json()
+
+        check(
+            f"Slots ({label}): request context echoed",
+            {key: body.get(key) for key in (
+                "business_id", "service_id", "branch_id", "staff_id",
+                "date", "duration", "capacity",
+            )} == {
+                "business_id": BUSINESS_ID,
+                "service_id": SERVICE_ID,
+                "branch_id": BRANCH_ID,
+                "staff_id": staff_id,
+                "date": slots_params["date"],
+                "duration": 60,
+                "capacity": 1,
+            },
+            {key: value for key, value in body.items() if key != "slots"},
+        )
+
+        slots = body.get("slots") or []
+        by_start = {slot.get("start_time"): slot for slot in slots}
+
+        check(
+            f"Slots ({label}): hourly 08:00-21:00 from working hours",
+            [slot.get("start_time") for slot in slots] == hourly,
+            [slot.get("start_time") for slot in slots],
+        )
+
+        check(
+            f"Slots ({label}): 10:00 is booked",
+            by_start.get("10:00") == {
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "is_available": False,
+                "available_spots": 0,
+            },
+            by_start.get("10:00"),
+        )
+
+        check(
+            f"Slots ({label}): 09:00 is free",
+            by_start.get("09:00") == {
+                "start_time": "09:00",
+                "end_time": "10:00",
+                "is_available": True,
+                "available_spots": 1,
+            },
+            by_start.get("09:00"),
+        )
+
+    for key, message in (
+        ("service_id", "Service not found"),
+        ("branch_id", "Branch not found"),
+        ("staff_id", "Staff not found"),
+    ):
+        foreign_id = FOREIGN.get(key)
+
+        if not foreign_id:
+            continue
+
+        response = request(
+            "GET",
+            "/bookings/available-slots",
+            params={**slots_params, key: foreign_id},
+            expected=(404,),
+            name=f"Available slots: foreign {key[:-3]} -> 404",
+        )
+
+        check_detail(f"Foreign {key[:-3]} message", response, message)
+
+    response = request(
+        "GET",
+        "/bookings/available-slots",
+        params={**slots_params, "business_id": 999999999},
+        expected=(404,),
+        name="Available slots: unknown business -> 404",
+    )
+
+    check_detail("Unknown business message", response, "Business not found")
+
+    request(
+        "GET",
+        "/bookings/available-slots",
+        params={
+            "business_id": BUSINESS_ID,
+            "staff_id": STAFF_ID,
+            "target_date": slots_params["date"],
+        },
+        expected=(422,),
+        name="Available slots: old parameters rejected",
+    )
+
+    request(
+        "GET",
+        "/bookings/available-slots",
+        params={key: value for key, value in slots_params.items() if key != "branch_id"},
+        expected=(422,),
+        name="Available slots: branch_id required",
+    )
+
+
+def test_booking_items():
+
+    print_section("STEP 10.1 — BOOKING ITEMS")
+
+    if not PRODUCT_ID:
+
+        skip_test(
+            "Booking items",
+            "PRODUCT_ID unavailable"
+        )
+
+        return
+
+    base = {
+        "business_id": BUSINESS_ID,
+        "service_id": SERVICE_ID,
+        "branch_id": BRANCH_ID,
+        "booking_date": BOOKING_DATE.isoformat(),
+        "start_time": "16:00",
+        "end_time": "17:00",
+        "guest_count": 1,
+    }
+
+    # --------------------------------------------------------
+    # DUPLICATE LINES ARE MERGED
+    # --------------------------------------------------------
+
+    response = request(
+        "POST",
+        "/bookings/create",
+        headers=CUSTOMER_HEADERS,
+        json={
+            **base,
+            "items": [
+                {"id": PRODUCT_ID, "kind": "product", "quantity": 1},
+                {"id": SERVICE_ID, "kind": "service", "quantity": 1, "price": "0"},
+                {"id": PRODUCT_ID, "kind": "product", "quantity": 2, "price": "1"},
+            ],
+        },
+        expected=(200,),
+        name="Booking with duplicate item lines",
+    )
+
+    if is_ok(response):
+        check_order(
+            "Duplicate lines merged",
+            response.json(),
+            main_order_lines(3),
+            SERVICE_PRICE + PRODUCT_PRICE * 3,
+        )
+        cancel_booking(response.json().get("id"), "Cancel duplicate-lines booking")
+
+    # --------------------------------------------------------
+    # LEGACY product_ids (only when items is empty)
+    # --------------------------------------------------------
+
+    response = request(
+        "POST",
+        "/bookings/create",
+        headers=CUSTOMER_HEADERS,
+        json={**base, "product_ids": [PRODUCT_ID, 999999999]},
+        expected=(200,),
+        name="Legacy product_ids (unknown id skipped)",
+    )
+
+    if is_ok(response):
+        check_order(
+            "Legacy product_ids",
+            response.json(),
+            main_order_lines(1),
+            SERVICE_PRICE + PRODUCT_PRICE,
+        )
+        cancel_booking(response.json().get("id"), "Cancel legacy product_ids booking")
+
+    response = request(
+        "POST",
+        "/bookings/create",
+        headers=CUSTOMER_HEADERS,
+        json={
+            **base,
+            "items": [{"id": SERVICE_ID, "kind": "service", "quantity": 1}],
+            "product_ids": [PRODUCT_ID],
+        },
+        expected=(200,),
+        name="items given: product_ids ignored",
+    )
+
+    if is_ok(response):
+        check_order(
+            "product_ids ignored with items",
+            response.json(),
+            main_order_lines(0),
+            SERVICE_PRICE,
+        )
+        cancel_booking(response.json().get("id"), "Cancel items-only booking")
+
+    # --------------------------------------------------------
+    # REJECTED ITEMS: nothing may be booked
+    # --------------------------------------------------------
+
+    my_before = get_json(raw("GET", "/bookings/my", headers=CUSTOMER_HEADERS))
+
+    response = request(
+        "POST",
+        "/products/create",
+        headers=OWNER_HEADERS,
+        json={
+            "business_id": BUSINESS_ID,
+            "name": "BRON Inactive Product",
+            "description": "Deactivated right away",
+            "price": "5000.00",
+        },
+        expected=(200,),
+        name="Create product to deactivate",
+    )
+
+    inactive_product_id = get_id(response)
+
+    if inactive_product_id:
+        request(
+            "PUT",
+            f"/products/{inactive_product_id}",
+            headers=OWNER_HEADERS,
+            json={"is_active": False},
+            expected=(200,),
+            name="Deactivate product",
+        )
+
+    rejected = [
+        (
+            [{"id": 999999999, "kind": "product", "quantity": 1}],
+            "Item not found: product 999999999",
+            "Unknown product",
+        ),
+    ]
+
+    if inactive_product_id:
+        rejected.append((
+            [{"id": inactive_product_id, "kind": "product", "quantity": 1}],
+            f"Item not found: product {inactive_product_id}",
+            "Inactive product",
+        ))
+
+    if FOREIGN.get("product_id"):
+        rejected.append((
+            [{"id": FOREIGN["product_id"], "kind": "product", "quantity": 1}],
+            f"Item not found: product {FOREIGN['product_id']}",
+            "Product of another business",
+        ))
+
+    if FOREIGN.get("service_id"):
+        rejected.append((
+            [{"id": FOREIGN["service_id"], "kind": "service", "quantity": 1}],
+            f"Item not found: service {FOREIGN['service_id']}",
+            "Service of another business",
+        ))
+
+    rejected.append((
+        [
+            {"id": PRODUCT_ID, "kind": "product", "quantity": 60},
+            {"id": PRODUCT_ID, "kind": "product", "quantity": 60},
+        ],
+        f"Quantity of product {PRODUCT_ID} must be at most 100",
+        "Merged quantity over 100",
+    ))
+
+    for items, message, label in rejected:
+        response = request(
+            "POST",
+            "/bookings/create",
+            headers=CUSTOMER_HEADERS,
+            json={**base, "start_time": "18:00", "end_time": "19:00", "items": items},
+            expected=(400,),
+            name=f"{label} -> 400",
+        )
+
+        check_detail(f"{label} message", response, message)
+
+    for item, label in (
+        ({"id": PRODUCT_ID, "kind": "product", "quantity": 101}, "quantity 101"),
+        ({"id": PRODUCT_ID, "kind": "product", "quantity": 0}, "quantity 0"),
+        ({"id": PRODUCT_ID, "kind": "gift", "quantity": 1}, "unknown kind"),
+        ({"kind": "product", "quantity": 1}, "item without id"),
+    ):
+        request(
+            "POST",
+            "/bookings/create",
+            headers=CUSTOMER_HEADERS,
+            json={**base, "start_time": "18:00", "end_time": "19:00", "items": [item]},
+            expected=(422,),
+            name=f"Item with {label} -> 422",
+        )
+
+    my_after = get_json(raw("GET", "/bookings/my", headers=CUSTOMER_HEADERS))
+
+    check(
+        "Rejected orders created no bookings",
+        isinstance(my_before, list) and isinstance(my_after, list) and len(my_after) == len(my_before),
+        f"{len(my_before or [])} -> {len(my_after or [])}",
+    )
+
+
 def test_booking_reschedule(booking_date):
 
-    print_section("STEP 10.1 — BOOKING RESCHEDULE")
+    print_section("STEP 10.2 — BOOKING RESCHEDULE")
 
     response = request(
         "PATCH",
@@ -1518,6 +2684,400 @@ def test_booking_reschedule(booking_date):
         expected=(200,),
         name="Owner reschedules booking back",
     )
+
+
+# ============================================================
+# STEP 10.3 — SERVICE SCHEDULE (availability)
+# ============================================================
+
+def slot_pairs(body):
+    slots = body.get("slots") if isinstance(body, dict) else None
+    return [(slot.get("start_time"), slot.get("end_time")) for slot in slots or []]
+
+
+def test_service_schedule():
+
+    global SCHEDULED_SERVICE_ID
+
+    print_section("STEP 10.3 — SERVICE SCHEDULE (availability)")
+
+    if not (BUSINESS_ACTIVE and BRANCH_ID):
+
+        skip_test(
+            "Service schedule",
+            "Approved business with a branch unavailable"
+        )
+
+        return
+
+    day = BOOKING_DATE
+    day_off = day + timedelta(days=1)
+    unlisted = day + timedelta(days=2)
+    blocked = BLOCKED_DATE
+
+    # Working hours of `day` are 08:00-22:00: 07:00 and 22:30 are outside
+    # them and must still be offered, since the schedule replaces them
+    expected_schedule = [
+        {"date": day.isoformat(), "times": ["07:00", "10:30", "22:30"]},
+        {"date": day_off.isoformat(), "times": []},
+        {"date": blocked.isoformat(), "times": ["10:00"]},
+    ]
+    expected_slots = [("07:00", "07:45"), ("10:30", "11:15"), ("22:30", "23:15")]
+
+    response = request(
+        "POST",
+        "/services/create",
+        headers=OWNER_HEADERS,
+        json={
+            "business_id": BUSINESS_ID,
+            "title": "BRON Scheduled Service",
+            "description": "Service bookable only at listed times",
+            "category": "Diagnostics",
+            "duration": 45,
+            "price": "120000.00",
+            "availability": [
+                {"date": blocked.isoformat(), "times": ["10:00"]},
+                {"date": day.isoformat(), "times": ["22:30", "07:00", "10:30", "07:00"]},
+                {"date": day_off.isoformat(), "times": []},
+            ],
+        },
+        expected=(200,),
+        name="Create service with own schedule",
+    )
+
+    SCHEDULED_SERVICE_ID = get_id(response)
+
+    if not SCHEDULED_SERVICE_ID:
+        return
+
+    print(f"    SCHEDULED_SERVICE_ID = {SCHEDULED_SERVICE_ID}")
+
+    service_endpoint = f"/services/{SCHEDULED_SERVICE_ID}"
+
+    check(
+        "Schedule stored sorted and de-duplicated",
+        get_json(response).get("availability") == expected_schedule,
+        get_json(response).get("availability"),
+    )
+
+    response = request(
+        "GET",
+        service_endpoint,
+        expected=(200,),
+        name="Scheduled service detail",
+    )
+
+    if is_ok(response):
+        check(
+            "Detail returns the schedule",
+            response.json().get("availability") == expected_schedule,
+            response.json().get("availability"),
+        )
+
+    response = request(
+        "GET",
+        f"/services/business/{BUSINESS_ID}",
+        expected=(200,),
+        name="Business services with availability",
+    )
+
+    if is_ok(response):
+        scheduled = find_by_id(response.json(), SCHEDULED_SERVICE_ID) or {}
+        plain = find_by_id(response.json(), SERVICE_ID) or {}
+        check(
+            "List: schedule for scheduled service, [] for plain one",
+            scheduled.get("availability") == expected_schedule
+            and plain.get("availability") == [],
+            {"scheduled": scheduled.get("availability"), "plain": plain.get("availability")},
+        )
+
+    # --------------------------------------------------------
+    # SLOTS FOLLOW THE SCHEDULE
+    # --------------------------------------------------------
+
+    def availability(target, name):
+        return request(
+            "GET",
+            f"{service_endpoint}/availability",
+            params={"date": target.isoformat()},
+            expected=(200,),
+            name=name,
+        )
+
+    response = availability(day, "Availability on scheduled date")
+
+    if is_ok(response):
+        check(
+            "Only scheduled times, 45-minute slots, working hours ignored",
+            slot_pairs(response.json()) == expected_slots
+            and all(slot.get("available_spots") == 1 for slot in response.json().get("slots")),
+            response.json().get("slots"),
+        )
+
+    for target, label in (
+        (day_off, "day off (empty times)"),
+        (unlisted, "date not in schedule"),
+        (blocked, "blocked date in schedule"),
+    ):
+        response = availability(target, f"Availability on {label}")
+
+        if is_ok(response):
+            check(
+                f"No slots on {label}",
+                response.json().get("slots") == [],
+                response.json().get("slots"),
+            )
+
+    def available_dates(name):
+        return request(
+            "GET",
+            f"{service_endpoint}/available-dates",
+            params={"days": 40},
+            expected=(200,),
+            name=name,
+        )
+
+    response = available_dates("Available dates of scheduled service")
+
+    if is_ok(response):
+        check(
+            "Only the scheduled date, with 3 free slots",
+            response.json() == [{"date": day.isoformat(), "free_slots": 3}],
+            response.json(),
+        )
+
+    response = request(
+        "GET",
+        "/bookings/available-slots",
+        params={
+            "business_id": BUSINESS_ID,
+            "service_id": SCHEDULED_SERVICE_ID,
+            "branch_id": BRANCH_ID,
+            "date": day.isoformat(),
+        },
+        expected=(200,),
+        name="Booking available-slots of scheduled service",
+    )
+
+    if is_ok(response):
+        check(
+            "available-slots follows the schedule",
+            slot_pairs(response.json()) == expected_slots
+            and response.json().get("duration") == 45,
+            response.json(),
+        )
+
+    # --------------------------------------------------------
+    # BOOKING AGAINST THE SCHEDULE
+    # --------------------------------------------------------
+
+    base = {
+        "business_id": BUSINESS_ID,
+        "service_id": SCHEDULED_SERVICE_ID,
+        "branch_id": BRANCH_ID,
+        "booking_date": day.isoformat(),
+        "guest_count": 1,
+    }
+
+    response = request(
+        "POST",
+        "/bookings/create",
+        headers=CUSTOMER_HEADERS,
+        json={**base, "start_time": "10:30", "end_time": "11:15"},
+        expected=(200,),
+        name="Book scheduled slot 10:30",
+    )
+
+    scheduled_booking_id = get_id(response)
+
+    if is_ok(response):
+        check_order(
+            "Scheduled booking",
+            response.json(),
+            {("service", SCHEDULED_SERVICE_ID): ("BRON Scheduled Service", 120000.0, 1)},
+            120000.0,
+        )
+
+    response = availability(day, "Availability after booking 10:30")
+
+    if is_ok(response):
+        by_start = {slot.get("start_time"): slot for slot in response.json().get("slots") or []}
+        check(
+            "10:30 is full, other slots free",
+            by_start.get("10:30", {}).get("available_spots") == 0
+            and by_start.get("10:30", {}).get("is_available") is False
+            and by_start.get("07:00", {}).get("available_spots") == 1,
+            response.json().get("slots"),
+        )
+
+    response = available_dates("Available dates after booking")
+
+    if is_ok(response):
+        check(
+            "Scheduled date now has 2 free slots",
+            response.json() == [{"date": day.isoformat(), "free_slots": 2}],
+            response.json(),
+        )
+
+    for target, start, end, message, label in (
+        (day, "12:00", "12:45", "Selected time is not in the service schedule", "Unscheduled time"),
+        (day, "07:00", "07:30", "end_time must be 07:45 for the 07:00 slot", "Wrong slot length"),
+        (day_off, "07:00", "07:45", "Service is not available on this date", "Day off"),
+        (unlisted, "07:00", "07:45", "Service is not available on this date", "Date not in schedule"),
+        (blocked, "10:00", "10:45", "Selected date is blocked", "Blocked date"),
+    ):
+        response = request(
+            "POST",
+            "/bookings/create",
+            headers=CUSTOMER_HEADERS,
+            json={**base, "booking_date": target.isoformat(), "start_time": start, "end_time": end},
+            expected=(400,),
+            name=f"Book scheduled service: {label} -> 400",
+        )
+
+        check_detail(f"{label} message", response, message)
+
+    # --------------------------------------------------------
+    # RESCHEDULE AGAINST THE SCHEDULE
+    # --------------------------------------------------------
+
+    if scheduled_booking_id:
+
+        response = request(
+            "PATCH",
+            f"/bookings/{scheduled_booking_id}/reschedule",
+            headers=CUSTOMER_HEADERS,
+            json={"booking_date": day.isoformat(), "start_time": "07:00", "end_time": "07:45"},
+            expected=(200,),
+            name="Reschedule to 07:00 (before working hours)",
+        )
+
+        if is_ok(response):
+            check(
+                "Rescheduled to the 07:00 slot",
+                response.json().get("start_time") == "07:00:00"
+                and response.json().get("end_time") == "07:45:00",
+                response.json(),
+            )
+
+        for target, start, end, message, label in (
+            (day, "12:00", "12:45", "Selected time is not in the service schedule", "unscheduled time"),
+            (day, "22:30", "23:00", "end_time must be 23:15 for the 22:30 slot", "wrong slot length"),
+            (day_off, "07:00", "07:45", "Service is not available on this date", "day off"),
+        ):
+            response = request(
+                "PATCH",
+                f"/bookings/{scheduled_booking_id}/reschedule",
+                headers=CUSTOMER_HEADERS,
+                json={"booking_date": target.isoformat(), "start_time": start, "end_time": end},
+                expected=(400,),
+                name=f"Reschedule to {label} -> 400",
+            )
+
+            check_detail(f"Reschedule {label} message", response, message)
+
+    # --------------------------------------------------------
+    # UPDATE THE SCHEDULE
+    # --------------------------------------------------------
+
+    def update(payload, name, expected=(200,)):
+        return request(
+            "PUT",
+            service_endpoint,
+            headers=OWNER_HEADERS,
+            json=payload,
+            expected=expected,
+            name=name,
+        )
+
+    response = update({"price": "125000.00"}, "PUT without availability")
+
+    if is_ok(response):
+        check(
+            "Missing availability keeps the schedule",
+            response.json().get("availability") == expected_schedule,
+            response.json().get("availability"),
+        )
+
+    response = update({"duration": 90}, "Longer duration breaking 22:30 slot -> 400", expected=(400,))
+
+    check_detail(
+        "Duration change message",
+        response,
+        f"Slot at 22:30 on {day.isoformat()} would end after 23:59",
+    )
+
+    response = raw("GET", service_endpoint)
+
+    check(
+        "Rejected duration change was not saved",
+        get_json(response).get("duration") == 45,
+        get_json(response).get("duration"),
+    )
+
+    response = update(
+        {"availability": [{"date": day.isoformat(), "times": ["09:00", "08:00", "09:00"]}]},
+        "PUT replaces the schedule",
+    )
+
+    if is_ok(response):
+        check(
+            "New schedule replaces the old one",
+            response.json().get("availability") == [
+                {"date": day.isoformat(), "times": ["08:00", "09:00"]}
+            ],
+            response.json().get("availability"),
+        )
+
+    update(
+        {"availability": [{"date": day.isoformat(), "times": ["25:00"]}]},
+        "PUT with bad time -> 422",
+        expected=(422,),
+    )
+
+    response = update({"availability": None}, "PUT availability null clears it")
+
+    if is_ok(response):
+        check(
+            "null clears the schedule",
+            response.json().get("availability") == [],
+            response.json().get("availability"),
+        )
+
+    update(
+        {"availability": [{"date": day.isoformat(), "times": ["08:00"]}]},
+        "PUT sets a schedule again",
+    )
+
+    response = update({"availability": []}, "PUT availability [] clears it")
+
+    if is_ok(response):
+        check(
+            "[] clears the schedule",
+            response.json().get("availability") == [],
+            response.json().get("availability"),
+        )
+
+    response = availability(day, "Availability after clearing schedule")
+
+    if is_ok(response):
+        starts = [slot.get("start_time") for slot in response.json().get("slots") or []]
+        check(
+            "Back to working hours: slots start at 08:00",
+            bool(starts) and starts[0] == "08:00" and "07:00" not in starts,
+            starts,
+        )
+
+    request(
+        "PUT",
+        service_endpoint,
+        headers=CUSTOMER_HEADERS,
+        json={"availability": []},
+        expected=(403,),
+        name="Customer cannot change the schedule",
+    )
+
+    cancel_booking(scheduled_booking_id, "Cancel scheduled booking")
 
 
 # ============================================================
@@ -1970,7 +3530,7 @@ def test_favorites():
 # STEP 17 — GALLERY
 # ============================================================
 
-def test_gallery_reads():
+def test_gallery():
 
     print_section(
         "STEP 17 — BUSINESS GALLERY"
@@ -1985,12 +3545,252 @@ def test_gallery_reads():
 
         return
 
-    request(
-        "GET",
-        f"/business-gallery/business/{BUSINESS_ID}",
-        expected=(200,),
-        name="Business gallery",
+    upload_endpoint = f"/business-gallery/upload/{BUSINESS_ID}"
+    list_endpoint = f"/business-gallery/business/{BUSINESS_ID}"
+
+    def gallery_order(name):
+        response = request(
+            "GET",
+            list_endpoint,
+            expected=(200,),
+            name=name,
+        )
+        if not is_ok(response):
+            return None
+        return [(img.get("id"), img.get("sort_order")) for img in response.json()]
+
+    # --------------------------------------------------------
+    # UPLOAD: appended to the end
+    # --------------------------------------------------------
+
+    uploaded = []
+
+    for color, fmt in (("red", "PNG"), ("green", "JPEG"), ("blue", "WEBP")):
+        response = request(
+            "POST",
+            upload_endpoint,
+            headers=OWNER_HEADERS,
+            files=image_upload(color, fmt),
+            expected=(200,),
+            name=f"Upload gallery image ({fmt})",
+        )
+
+        if is_ok(response):
+            uploaded.append(response.json())
+
+    if len(uploaded) != 3:
+        return
+
+    a, b, c = (img["id"] for img in uploaded)
+
+    check(
+        "Uploads get sort_order 0, 1, 2",
+        [img.get("sort_order") for img in uploaded] == [0, 1, 2],
+        [img.get("sort_order") for img in uploaded],
     )
+
+    check(
+        "Gallery URLs are absolute and served",
+        all(
+            is_absolute_url(img.get("image")) and media_status(img.get("image")) == 200
+            for img in uploaded
+        ),
+        [img.get("image") for img in uploaded],
+    )
+
+    order = gallery_order("Gallery list")
+    check("List ordered by upload", order == [(a, 0), (b, 1), (c, 2)], order)
+
+    # --------------------------------------------------------
+    # PUT: sort_order and/or image (multipart)
+    # --------------------------------------------------------
+
+    def update(image_id, name, files, headers=OWNER_HEADERS, expected=(200,)):
+        return request(
+            "PUT",
+            f"/business-gallery/{image_id}",
+            headers=headers,
+            files=files,
+            expected=expected,
+            name=name,
+        )
+
+    response = update(a, "Move first image to sort_order 5", {"sort_order": (None, "5")})
+
+    if is_ok(response):
+        check(
+            "sort_order changed, image kept",
+            response.json().get("sort_order") == 5
+            and response.json().get("image") == uploaded[0].get("image"),
+            response.json(),
+        )
+
+    order = gallery_order("Gallery list after reorder")
+    check("List ordered by sort_order", order == [(b, 1), (c, 2), (a, 5)], order)
+
+    old_url = uploaded[1].get("image")
+
+    response = update(b, "Replace image file (PUT image)", image_upload("yellow", "PNG"))
+
+    if is_ok(response):
+        new_url = response.json().get("image")
+        check(
+            "Image replaced, sort_order kept",
+            is_absolute_url(new_url) and new_url != old_url
+            and response.json().get("sort_order") == 1,
+            response.json(),
+        )
+        check(
+            "New file served, old file deleted",
+            media_status(new_url) == 200 and media_status(old_url) == 404,
+            (media_status(new_url), media_status(old_url)),
+        )
+
+    response = update(
+        c,
+        "Replace image and sort_order together",
+        {**image_upload("purple", "JPEG"), "sort_order": (None, "0")},
+    )
+
+    if is_ok(response):
+        check(
+            "Both fields applied",
+            response.json().get("sort_order") == 0
+            and response.json().get("image") != uploaded[2].get("image"),
+            response.json(),
+        )
+
+    order = gallery_order("Gallery list after updates")
+    check("Final order c(0), b(1), a(5)", order == [(c, 0), (b, 1), (a, 5)], order)
+
+    response = update(a, "PUT without image and sort_order -> 400", {"note": (None, "x")}, expected=(400,))
+    check_detail("Empty update message", response, "Provide image or sort_order")
+
+    update(a, "PUT with negative sort_order -> 422", {"sort_order": (None, "-1")}, expected=(422,))
+    update(a, "PUT with non-integer sort_order -> 422", {"sort_order": (None, "abc")}, expected=(422,))
+
+    response = update(
+        a,
+        "PUT with non-image file -> 400",
+        {"image": ("notes.txt", b"not an image", "text/plain")},
+        expected=(400,),
+    )
+    check_detail("Wrong type message", response, "Only JPEG, PNG or WEBP images are allowed")
+
+    update(a, "Customer cannot update gallery image", {"sort_order": (None, "1")},
+           headers=CUSTOMER_HEADERS, expected=(403,))
+    update(a, "Gallery update without token rejected", {"sort_order": (None, "1")},
+           headers=None, expected=(401,))
+    update(999999999, "Update unknown gallery image -> 404", {"sort_order": (None, "1")},
+           expected=(404,))
+
+    # --------------------------------------------------------
+    # NEW UPLOAD GOES AFTER THE MAXIMUM
+    # --------------------------------------------------------
+
+    response = request(
+        "POST",
+        upload_endpoint,
+        headers=OWNER_HEADERS,
+        files=image_upload("orange", "PNG"),
+        expected=(200,),
+        name="Upload after reorder",
+    )
+
+    if is_ok(response):
+        check(
+            "New image gets max sort_order + 1 (6)",
+            response.json().get("sort_order") == 6,
+            response.json(),
+        )
+
+    request(
+        "POST",
+        upload_endpoint,
+        headers=CUSTOMER_HEADERS,
+        files=image_upload("red", "PNG"),
+        expected=(403,),
+        name="Customer cannot upload to gallery",
+    )
+
+    response = request(
+        "POST",
+        upload_endpoint,
+        headers=OWNER_HEADERS,
+        files={"image": ("notes.txt", b"not an image", "text/plain")},
+        expected=(400,),
+        name="Non-image gallery upload rejected",
+    )
+    check_detail("Gallery wrong type message", response, "Only JPEG, PNG or WEBP images are allowed")
+
+    # --------------------------------------------------------
+    # LIMIT: 20 IMAGES
+    # --------------------------------------------------------
+
+    count = len(get_json(raw("GET", list_endpoint)) or [])
+    fill_ok = True
+
+    for index in range(count, 20):
+        response = raw(
+            "POST",
+            upload_endpoint,
+            headers=OWNER_HEADERS,
+            files=image_upload(f"#{index * 10:06x}", "PNG"),
+        )
+        fill_ok = fill_ok and is_ok(response)
+
+    check(f"Gallery filled up to 20 images (from {count})", fill_ok)
+
+    response = request(
+        "POST",
+        upload_endpoint,
+        headers=OWNER_HEADERS,
+        files=image_upload("black", "PNG"),
+        expected=(400,),
+        name="21st gallery image rejected",
+    )
+    check_detail("Gallery limit message", response, "Gallery is limited to 20 images")
+
+    # --------------------------------------------------------
+    # DELETE
+    # --------------------------------------------------------
+
+    request(
+        "DELETE",
+        f"/business-gallery/{a}",
+        headers=CUSTOMER_HEADERS,
+        expected=(403,),
+        name="Customer cannot delete gallery image",
+    )
+
+    a_url = (find_by_id(get_json(raw("GET", list_endpoint)), a) or {}).get("image")
+
+    request(
+        "DELETE",
+        f"/business-gallery/{a}",
+        headers=OWNER_HEADERS,
+        expected=(200,),
+        name="Owner deletes gallery image",
+    )
+
+    order = gallery_order("Gallery list after delete")
+
+    if order is not None:
+        check(
+            "Deleted image gone, others keep sort_order",
+            a not in [image_id for image_id, _ in order]
+            and order[:2] == [(c, 0), (b, 1)],
+            order[:3],
+        )
+
+    check("Deleted gallery file is gone", media_status(a_url) == 404, media_status(a_url))
+
+    # Cleanup: the local media folder shouldn't grow with every run
+    for image in get_json(raw("GET", list_endpoint)) or []:
+        raw("DELETE", f"/business-gallery/{image['id']}", headers=OWNER_HEADERS)
+
+    remaining = get_json(raw("GET", list_endpoint))
+    check("Gallery cleaned up", remaining == [], remaining)
 
 
 # ============================================================
@@ -2087,6 +3887,8 @@ def main():
     # --------------------------------------------------------
 
     test_user_profile()
+    test_notification_settings()
+    test_categories()
 
     business_ok = test_business()
 
@@ -2097,12 +3899,15 @@ def main():
         test_branch()
         test_services()
         test_products()
+        test_product_image()
         test_staff()
 
         test_working_hours()
         test_blocked_dates()
 
         booking_ok = test_booking()
+
+        test_service_schedule()
 
         if booking_ok:
 
@@ -2131,7 +3936,7 @@ def main():
             )
 
         test_favorites()
-        test_gallery_reads()
+        test_gallery()
 
     else:
 

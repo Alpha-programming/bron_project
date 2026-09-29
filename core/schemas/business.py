@@ -197,5 +197,11 @@ class BusinessStatsOutSchema(Schema):
 
 class BusinessViewOutSchema(Schema):
 
-    counted: bool
-    views_count: int
+    counted: bool = Field(
+        ...,
+        description="Always true: every request is counted. Kept for compatibility",
+    )
+    views_count: int = Field(
+        ...,
+        description="Total views of the business, including this one",
+    )

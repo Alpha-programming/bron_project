@@ -2,6 +2,7 @@ from ninja import Router
 from ninja.errors import HttpError
 from core.security import JWTAuth
 from core.schemas.business import BusinessCreateSchema, BusinessUpdateSchema, BusinessOutSchema, BusinessListSchema, BusinessStatsOutSchema, BusinessViewOutSchema
+from core.schemas.common import ErrorSchema
 from core.services.business import get_all_businesses, get_user_businesses, get_business_by_id, create_business, update_business, delete_business, register_business_view
 from core.utils.auth import get_optional_user
 from core.utils.helpers import get_client_ip
@@ -86,11 +87,22 @@ def delete_business_view(request, business_id: int):
     return delete_business(user, business)
 
 
-@router.post("/{business_id}/view", response=BusinessViewOutSchema)
+@router.post(
+    "/{business_id}/view",
+    response={200: BusinessViewOutSchema, 404: ErrorSchema},
+    summary="Register a business page view",
+)
 def register_view(request, business_id: int):
     """
-    Called by the frontend when a business page is opened.
-    Public; a Bearer token is used only to deduplicate per user.
+    Called by the frontend when a business page is opened. Public, no body.
+
+    Every request is counted as a separate view: repeated opens by the same
+    visitor and the owner's own visits all add +1, nothing is deduplicated.
+    An optional Bearer token only links the view to the user (otherwise the
+    client IP is logged); an invalid token is ignored.
+
+    Returns `counted` (always true) and the updated `views_count`.
+    Errors: 404 business not found.
     """
     business = get_business_by_id(business_id)
     return register_business_view(

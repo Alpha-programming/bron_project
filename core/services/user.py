@@ -92,6 +92,35 @@ def change_user_password(user: User, data) -> None:
     user.save()
 
 
+# API key -> User model field
+NOTIFICATION_FIELDS = {
+    "push": "notify_push",
+    "email": "notify_email",
+    "bookingReminder": "notify_booking_reminder",
+    "promotions": "notify_promotions",
+}
+
+
+def get_notification_settings(user: User) -> dict:
+    return {key: getattr(user, field) for key, field in NOTIFICATION_FIELDS.items()}
+
+
+def update_notification_settings(user: User, data) -> dict:
+    """
+    Partial update: null counts as "not sent", so a client toggling one switch
+    cannot accidentally reset the others.
+    """
+    changed = []
+    for key, value in data.model_dump(exclude_none=True).items():
+        field = NOTIFICATION_FIELDS[key]
+        setattr(user, field, value)
+        changed.append(field)
+
+    if changed:
+        user.save(update_fields=changed)
+    return get_notification_settings(user)
+
+
 def execute_profile_deletion(user: User) -> dict:
     """
     Deletes the current user profile account records entirely.
