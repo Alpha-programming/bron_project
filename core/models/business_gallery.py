@@ -14,9 +14,17 @@ class BusinessGallery(models.Model):
         upload_to="business_gallery/"
     )
 
+    # Display position, lower first; ties go by id
+    sort_order = models.PositiveIntegerField(
+        default=0
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )
+
+    class Meta:
+        ordering = ["sort_order", "id"]
 
     def __str__(self):
         return f"{self.business.name} Gallery"

@@ -1,5 +1,6 @@
-from datetime import date
-from ninja import Router
+# Aliased so the `date` query parameter below can keep its public name
+from datetime import date as date_type
+from ninja import Router, Query
 from core.security import JWTAuth
 from core.models import User
 from core.schemas.blocked_date import (
@@ -33,12 +34,27 @@ def business_blocked_dates(request, business_id: int):
     return get_business_blocked_dates(business_id)
 
 
-@router.get("/check", response=BlockedCheckOutSchema)
-def check_blocked_date_view(request, business_id: int, target_date: date):
+@router.get(
+    "/check",
+    response={200: BlockedCheckOutSchema},
+    summary="Check whether a date is blocked",
+)
+def check_blocked_date_view(
+    request,
+    business_id: int = Query(..., description="Business ID"),
+    date: date_type = Query(..., description="Date to check, YYYY-MM-DD"),
+):
     """
-    Checks if a business location has blocked out appointments for a specific calendar date.
+    Tells whether the business has blocked bookings on the given date.
+
+    Auth: none (public). Query parameters: `business_id` and `date` (YYYY-MM-DD),
+    both required; the old `target_date` parameter is not accepted.
+    An unknown business is not an error: the response has `is_blocked: false`.
+    `reason` is null when the date is not blocked or the business gave no reason.
+
+    Errors: 422 - `business_id` or `date` is missing or malformed.
     """
-    return check_date_blockage(business_id, target_date)
+    return check_date_blockage(business_id, date)
 
 
 # Keep your detail, update, and delete paths exactly as they are at the bottom

@@ -1,14 +1,9 @@
-from datetime import timedelta
-
 from ninja.errors import HttpError
 from core.models import Business, BusinessView
 from core.services.category import get_category_by_id
 from django.db.models import F, Sum
-from django.utils import timezone
 from core.models import Booking
 from decimal import Decimal
-
-VIEW_DEDUP_WINDOW = timedelta(hours=24)
 
 
 def get_all_businesses():
@@ -135,23 +130,10 @@ def delete_business(
 
 def register_business_view(business, user, ip) -> dict:
     """
-    Counts one view per user (or per IP for anonymous visitors) per 24 hours.
-    The owner opening their own page is never counted.
+    Every request is a separate view: no deduplication of repeated opens,
+    and the owner's own visits count too. The BusinessView row keeps who
+    viewed (user or IP) for later analytics.
     """
-    if user is not None and user.id == business.owner_id:
-        return {"counted": False, "views_count": business.views_count}
-
-    since = timezone.now() - VIEW_DEDUP_WINDOW
-    recent = BusinessView.objects.filter(business=business, viewed_at__gte=since)
-
-    if user is not None:
-        recent = recent.filter(user=user)
-    else:
-        recent = recent.filter(user__isnull=True, ip=ip)
-
-    if recent.exists():
-        return {"counted": False, "views_count": business.views_count}
-
     BusinessView.objects.create(business=business, user=user, ip=ip)
 
     # Atomic increment so concurrent views don't lose updates

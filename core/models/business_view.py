@@ -6,8 +6,8 @@ from .user import User
 
 class BusinessView(models.Model):
     """
-    One row per unique view used to deduplicate Business.views_count.
-    Logged-in viewers are matched by user, anonymous ones by IP.
+    Log of business page views, one row per counted request.
+    Business.views_count holds the running total.
     """
 
     business = models.ForeignKey(

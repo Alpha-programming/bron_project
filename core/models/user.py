@@ -43,6 +43,13 @@ class User(AbstractUser):
 
     is_verified = models.BooleanField(default=False)
 
+    # Notification preferences, see GET/PUT /api/users/profile/notifications
+    notify_push = models.BooleanField(default=True)
+    notify_email = models.BooleanField(default=True)
+    notify_booking_reminder = models.BooleanField(default=True)
+    # Marketing is opt-in
+    notify_promotions = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     REQUIRED_FIELDS = ["email"]

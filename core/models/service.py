@@ -1,4 +1,7 @@
+from django.core.exceptions import ValidationError
 from django.db import models
+
+from core.utils.schedule import normalize_availability
 from .business import Business
 
 
@@ -37,12 +40,30 @@ class Service(models.Model):
         decimal_places=2
     )
 
+    # Own schedule, see core.utils.schedule. Empty = follow working hours.
+    availability = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='[{"date": "YYYY-MM-DD", "times": ["HH:MM", ...]}]. '
+                  "Empty list = bookable within the business working hours."
+    )
+
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["title"]
+
+    def clean(self):
+        super().clean()
+        # PositiveIntegerField accepts 0, but a zero-length slot is meaningless
+        if self.duration is not None and self.duration < 1:
+            raise ValidationError({"duration": "Duration must be at least 1 minute"})
+        try:
+            self.availability = normalize_availability(self.availability, self.duration)
+        except ValueError as exc:
+            raise ValidationError({"availability": str(exc)})
 
     def __str__(self):
         return self.title

@@ -97,6 +97,13 @@ class Booking(models.Model):
         related_name="bookings"
     )
 
+    # Order snapshot with the prices charged at booking time:
+    # [{"id", "name", "price", "quantity", "kind": "service" | "product"}]
+    items = models.JSONField(
+        default=list,
+        blank=True
+    )
+
     notes = models.TextField(
         blank=True
     )

@@ -5,12 +5,14 @@ from core.models import Category
 
 
 def _with_business_count():
+    # Explicit ORDER BY: with the Count's GROUP BY Django drops Meta.ordering,
+    # so PostgreSQL returned rows in any order and "Other" was not last
     return Category.objects.annotate(
         business_count=Count(
             "businesses",
             filter=Q(businesses__is_active=True),
         )
-    )
+    ).order_by("order", "name")
 
 
 def get_active_categories():

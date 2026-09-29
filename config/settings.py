@@ -86,6 +86,13 @@ MIDDLEWARE = [
 
     # Headless Social Identity Providers Trackers
     'allauth.account.middleware.AccountMiddleware',
+
+    # Parses multipart bodies of PUT/PATCH/DELETE so ninja File/Form params
+    # work there (Django fills request.FILES only for POST). Sits below
+    # Security/CORS so its 400 for a malformed body still gets their headers,
+    # and must stay above OAuth2TokenMiddleware: that one reads request.POST
+    # for Bearer requests, after which the body can no longer be parsed.
+    'ninja.compatibility.files.fix_request_files_middleware',
     'oauth2_provider.middleware.OAuth2TokenMiddleware'
 ]
 
