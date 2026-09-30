@@ -533,6 +533,7 @@ curl -X POST https://bronofficial.com/api/bookings/create \
 ```json
 {
   "id": 31, "user_id": 5, "business_id": 2, "service_id": 7, "branch_id": 3, "staff_id": null,
+  "user": {"first_name": "Имя", "last_name": "Фамилия", "full_name": "Имя Фамилия", "username": "+998901234567", "avatar": null},
   "booking_date": "2026-10-01", "start_time": "10:00:00", "end_time": "11:00:00",
   "guest_count": 1, "total_price": 115000.0, "status": "pending",
   "attendance_status": "not_set", "extra_wait_minutes": 0,
@@ -543,6 +544,19 @@ curl -X POST https://bronofficial.com/api/bookings/create \
 }
 ```
 `GET /api/bookings/my` тоже отдаёт `items` и `total_price` у каждой брони.
+
+### Клиент в брони (`user`)
+
+Во всех ответах с полной бронью (`GET /api/bookings/business/{business_id}`, `/staff/{staff_id}`, `/{booking_id}`, `create`, `approve`, `reject`, `cancel`, `reschedule`, `attendance`, `PUT /{booking_id}`) рядом с `user_id` приходит объект `user`:
+
+```json
+"user": {"first_name": "Имя", "last_name": "Фамилия", "full_name": "Имя Фамилия", "username": "...", "avatar": "https://bronofficial.com/media/avatars/..."}
+```
+
+- `full_name` — имя и фамилия через пробел; пустая строка, если ни то ни другое не заполнено.
+- Для отображения: `full_name`, если не пустое, иначе `username`.
+- `avatar` — полный URL или `null`.
+- Телефона, email и других персональных данных в объекте нет.
 
 Правила:
 - Элемент: `id`, `kind` (`"service"` или `"product"`), `quantity` (1–100, по умолчанию 1). `name` и `price` можно передать, но сервер их **игнорирует**: название и цена берутся из базы.

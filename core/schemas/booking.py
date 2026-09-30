@@ -8,6 +8,8 @@ from typing import List, Literal, Optional
 from ninja import Schema
 from pydantic import Field
 
+from core.utils.helpers import absolute_media_url
+
 ItemKind = Literal["service", "product"]
 
 MAX_ITEM_QUANTITY = 100
@@ -151,9 +153,30 @@ class BookingUpdateSchema(Schema):
     )
 
 
+class BookingUserSchema(Schema):
+    """Customer shown to the business. No phone or email on purpose."""
+
+    first_name: str
+    last_name: str
+    full_name: str = Field(
+        ..., description="First and last name, empty string when neither is set"
+    )
+    username: str = Field(..., description="Fallback for display when full_name is empty")
+    avatar: Optional[str] = Field(..., description="Absolute URL of the avatar, null if none")
+
+    @staticmethod
+    def resolve_full_name(obj):
+        return obj.get_full_name()
+
+    @staticmethod
+    def resolve_avatar(obj, context):
+        return absolute_media_url(context["request"], obj.avatar)
+
+
 class BookingOutSchema(Schema):
     id: int
     user_id: int
+    user: BookingUserSchema = Field(..., description="Customer who made the booking")
     business_id: int
     service_id: int
     branch_id: int

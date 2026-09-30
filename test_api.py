@@ -2206,6 +2206,22 @@ def test_booking():
             expected_total,
         )
 
+        rows = response.json()
+        check(
+            "Business bookings carry customer display data only",
+            rows and all(
+                set(row.get("user") or {}) == {"first_name", "last_name", "full_name", "username", "avatar"}
+                for row in rows
+            ),
+            rows[:1],
+        )
+        own = find_by_id(rows, BOOKING_ID) or {}
+        check(
+            "Business booking shows who booked it",
+            (own.get("user") or {}).get("username", "").startswith("customer_"),
+            own.get("user"),
+        )
+
     if STAFF_ID:
 
         request(

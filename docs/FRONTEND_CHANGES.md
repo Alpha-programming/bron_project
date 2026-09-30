@@ -614,7 +614,21 @@ await api(`/bookings/${bookingId}/attendance`, {
 
 ---
 
-## 16. Чек-лист для фронта
+## 16. Клиент в бронях бизнеса
+
+Раньше в списке броней владельца был только `user_id`, поэтому приходилось показывать «Клиент #16». Теперь в каждой брони есть объект `user`: в `GET /bookings/business/{business_id}`, `/bookings/staff/{staff_id}`, `/bookings/{id}` и в ответах действий над бронью.
+
+```js
+const name = booking.user.full_name || booking.user.username;
+const avatar = booking.user.avatar;            // полный URL или null — показать заглушку
+```
+
+- Поля: `first_name`, `last_name`, `full_name`, `username`, `avatar`. Телефона и email нет.
+- `full_name` — пустая строка, если имя не заполнено.
+
+---
+
+## 17. Чек-лист для фронта
 
 - [ ] Форма «Регистрация бизнеса»: `POST /business-applications/create` (без категории и адреса), успех — `201`, обработка `422`/`429`
 - [ ] Полная анкета бизнеса: `category_id` из `/categories/`, поля `email`, `owner_name`, соцсети с полными URL
@@ -643,3 +657,4 @@ await api(`/bookings/${bookingId}/attendance`, {
 Вопросы по API — к бэкенду. Актуальные поля всегда в Swagger: https://bronofficial.com/api/docs
 - [ ] Отметка посещения: кнопки `visited` / `late` / `no_show` для подтверждённых броней, `extra_wait_minutes` для `late`
 - [ ] Профиль клиента: `booking_rating` (или «нет оценённых визитов» при `null`) и счётчики вовремя / опоздал / не пришёл отдельно от рейтинга отзывов
+- [ ] Брони бизнеса: имя клиента из `user.full_name` (иначе `user.username`) и аватар `user.avatar` вместо «Клиент #id»
