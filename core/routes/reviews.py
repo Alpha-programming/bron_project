@@ -13,12 +13,14 @@ from core.schemas.engagement import (
     ReviewUpdateSchema,
     CustomerRatingSchema,
 )
+from core.schemas.common import ErrorSchema
 
 from core.services.engagement import (
     add_business_review,
     add_customer_review,
     modify_user_review,
     remove_user_review,
+    customer_booking_rating,
 )
 router = Router(tags=["Reviews & Ratings"])
 
@@ -73,12 +75,27 @@ def get_customer_reviews_view(
 
 @router.get(
     "/customer/{customer_id}/rating",
-    response=CustomerRatingSchema
+    response={200: CustomerRatingSchema, 404: ErrorSchema},
+    summary="Customer rating: reviews and attendance",
 )
 def get_customer_rating_view(
     request,
     customer_id: int
 ):
+    """
+    Public. Two independent ratings of a customer:
+
+    - `rating` / `reviews_count` - average of the reviews businesses left
+      about the customer (POST /api/reviews/customer/{customer_id}).
+    - `booking_rating` - average attendance score from
+      PATCH /api/bookings/{booking_id}/attendance: visited 5, late 3,
+      no_show 2.5. Only the current mark of each booking counts, so
+      re-sending or changing a mark replaces its score. Cancelled bookings
+      are ignored. null when no booking has been evaluated.
+      `evaluated_bookings_count` = on_time_count + late_count + no_show_count.
+
+    Errors: 404 the user does not exist or is not a customer.
+    """
     try:
         customer = User.objects.get(
             id=customer_id,
@@ -92,6 +109,7 @@ def get_customer_rating_view(
         "username": customer.username,
         "rating": customer.rating,
         "reviews_count": customer.reviews_count,
+        **customer_booking_rating(customer),
     }
 
 @router.put("/{id}", auth=JWTAuth(), response=ReviewOutSchema)

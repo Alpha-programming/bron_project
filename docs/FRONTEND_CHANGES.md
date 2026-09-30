@@ -24,6 +24,7 @@ Swagger со всеми полями: https://bronofficial.com/api/docs
 | `GET /staff/{id}/bookings`, `GET /bookings/staff/{id}` | публичный / любой пользователь | только владелец бизнеса | Передавать токен владельца |
 | `GET /businesses/{id}/stats`, `/analytics` | любой залогиненный | только владелец (иначе 403) | Показывать только в кабинете владельца |
 | `PUT /bookings/{id}` | принимал `status` | `status` игнорируется, только `staff_id`, только для `pending` | Статус менять через `/approve`, `/reject`, `/cancel` |
+| `PATCH /bookings/{id}/attendance` с неизвестным `status` | `400` | **422**; допустимы `visited`, `late`, `no_show` | Показывать выбор только из трёх статусов (раздел 15) |
 | `POST /auth/register` при занятом логине/email/телефоне | 200 и `user_id: null` | **400** и `{"detail": "Email already exists"}` | Показывать `detail` пользователю |
 | `POST /bookings/create` | принимал любые данные | новые проверки (см. раздел 13) | Обрабатывать 400/404; товары передавать в `items` (раздел 14) |
 | Слоты `GET /bookings/available-slots` | `?business_id&staff_id&target_date` → `{"date", "available_slots": ["09:00", "09:30", ...]}` | `?business_id&service_id&branch_id&date` (+ необязательный `staff_id`) → объект со `slots: [{start_time, end_time, is_available, available_spots}]`; `target_date` → **422** | Поменять параметры и разбор ответа (раздел 13) или перейти на `GET /services/{id}/availability` (раздел 9) |
@@ -584,7 +585,36 @@ await api("/bookings/create", {
 
 ---
 
-## 15. Чек-лист для фронта
+## 15. Отметка посещения и рейтинг клиента
+
+**Кабинет владельца: отметка посещения.** Для подтверждённой брони:
+```js
+await api(`/bookings/${bookingId}/attendance`, {
+  method: "PATCH",
+  body: JSON.stringify({ status: "late", extra_wait_minutes: 5 }),   // visited | late | no_show
+});
+// ответ — бронь, в attendance_status сохранённая отметка
+```
+- Только владелец бизнеса (`403` для остальных), только бронь в статусе `confirmed` (`400 "Booking must be confirmed first."`).
+- `visited` переводит бронь в `completed`, но отметку можно исправить позже: `late` / `no_show` вернут её в `confirmed`.
+- Повторное нажатие той же кнопки безопасно: оценка не задваивается. Смена отметки заменяет прежнюю.
+- `extra_wait_minutes` — только для `late`, 0–10.
+- Неизвестный `status` теперь даёт `422` (раньше `400`).
+
+**Профиль клиента: рейтинг.** `GET /reviews/customer/{customer_id}/rating` возвращает два независимых рейтинга:
+
+| Поле | Что показывать |
+|---|---|
+| `rating`, `reviews_count` | рейтинг по отзывам бизнесов (как раньше) |
+| `booking_rating` | рейтинг посещений: среднее, `visited` = 5, `late` = 3, `no_show` = 2.5; `null` — «нет оценённых визитов» |
+| `evaluated_bookings_count` | сколько визитов учтено |
+| `on_time_count`, `late_count`, `no_show_count` | «вовремя / опоздал / не пришёл» |
+
+Отменённые брони в рейтинг посещений не входят.
+
+---
+
+## 16. Чек-лист для фронта
 
 - [ ] Форма «Регистрация бизнеса»: `POST /business-applications/create` (без категории и адреса), успех — `201`, обработка `422`/`429`
 - [ ] Полная анкета бизнеса: `category_id` из `/categories/`, поля `email`, `owner_name`, соцсети с полными URL
@@ -611,3 +641,5 @@ await api("/bookings/create", {
 - [ ] Загрузка картинок: брать URL из ответа (расширение может поменяться), показывать `detail` при `400`
 
 Вопросы по API — к бэкенду. Актуальные поля всегда в Swagger: https://bronofficial.com/api/docs
+- [ ] Отметка посещения: кнопки `visited` / `late` / `no_show` для подтверждённых броней, `extra_wait_minutes` для `late`
+- [ ] Профиль клиента: `booking_rating` (или «нет оценённых визитов» при `null`) и счётчики вовремя / опоздал / не пришёл отдельно от рейтинга отзывов
