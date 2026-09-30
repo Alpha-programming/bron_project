@@ -190,9 +190,18 @@ class BookingListSchema(Schema):
         return snapshot_items(obj)
 
 
+AttendanceStatus = Literal["visited", "late", "no_show"]
+
+
 class BookingAttendanceSchema(Schema):
-    status: str
-    extra_wait_minutes: int = 0
+    status: AttendanceStatus = Field(
+        ...,
+        description="visited - came on time, late - came late, no_show - did not come",
+    )
+    extra_wait_minutes: int = Field(
+        0,
+        description="Only for late: how long the business waited, 0-10 minutes. Ignored otherwise.",
+    )
 
 
 class AvailableSlotSchema(Schema):

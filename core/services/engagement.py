@@ -1,3 +1,6 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.db.models import Count, Q
 from ninja.errors import HttpError
 from core.models import Review, Favorite, Business, User, Booking
 from core.schemas.engagement import (
@@ -147,6 +150,48 @@ def remove_user_review(user: User, review_id: int) -> dict:
 
     review.delete()
     return {"success": True, "message": "Review post removed successfully."}
+
+
+# Score of each attendance mark in the customer's booking rating
+ATTENDANCE_POINTS = {
+    "visited": Decimal("5"),
+    "late": Decimal("3"),
+    "no_show": Decimal("2.5"),
+}
+
+
+def customer_booking_rating(customer: User) -> dict:
+    """
+    Attendance rating built from the current mark of each booking, so
+    re-sending a mark or changing it never adds a second score.
+    Cancelled bookings don't count. Separate from the review rating.
+    """
+    counts = Booking.objects.filter(
+        user=customer,
+        attendance_status__in=list(ATTENDANCE_POINTS),
+    ).exclude(
+        status__in=("cancelled", "rejected"),
+    ).aggregate(**{
+        mark: Count("id", filter=Q(attendance_status=mark))
+        for mark in ATTENDANCE_POINTS
+    })
+
+    evaluated = sum(counts.values())
+    booking_rating = None
+
+    if evaluated:
+        score = sum(ATTENDANCE_POINTS[mark] * count for mark, count in counts.items())
+        booking_rating = float(
+            (score / evaluated).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        )
+
+    return {
+        "booking_rating": booking_rating,
+        "evaluated_bookings_count": evaluated,
+        "on_time_count": counts["visited"],
+        "late_count": counts["late"],
+        "no_show_count": counts["no_show"],
+    }
 
 
 # --- FAVORITE SERVICE ENGINES ---

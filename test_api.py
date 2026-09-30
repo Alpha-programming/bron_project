@@ -3172,7 +3172,7 @@ def test_attendance():
             "status": "something_wrong",
             "extra_wait_minutes": 0,
         },
-        expected=(400,),
+        expected=(422,),
         name="Reject invalid attendance status",
     )
 
@@ -3424,6 +3424,16 @@ def test_customer_review():
         print(
             "    Reviews:",
             data.get("reviews_count")
+        )
+
+        # The booking was marked late, then visited: the new mark replaces
+        # the old one instead of adding a second score
+        check(
+            "Booking rating counts only the current mark",
+            data.get("booking_rating") == 5.0
+            and data.get("evaluated_bookings_count") == 1
+            and (data.get("on_time_count"), data.get("late_count"), data.get("no_show_count")) == (1, 0, 0),
+            data,
         )
 
     # --------------------------------------------------------

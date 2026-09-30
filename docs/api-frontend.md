@@ -26,6 +26,7 @@
 | Галерея бизнеса: новые фото сверху | порядок по `sort_order`, затем `id`; новое фото добавляется **в конец** |
 | `social_links` — произвольный словарь | только ключи `instagram`, `telegram`, `facebook`, `tiktok`, `youtube`; значение — полный URL с `http(s)://` |
 | В ответах бизнеса было `owner_username` | поле убрано; свои бизнесы — `GET /api/businesses/my` |
+| `PATCH /api/bookings/{id}/attendance` с неизвестным `status` → `400` | → `422`; допустимы только `visited`, `late`, `no_show` |
 
 ---
 
@@ -603,6 +604,46 @@ PATCH /api/bookings/{booking_id}/reschedule     (auth: клиент брони �
 - Другая сторона получает уведомление `booking_rescheduled`.
 - Время выбирайте из `availability` услуги. Сама бронь при проверке не считается занятой, поэтому можно сдвинуть её внутри своего же слота.
 - У услуги с собственным расписанием новое время должно быть слотом из расписания; часы работы бизнеса тогда не проверяются.
+
+---
+
+## Отметка посещения и рейтинг клиента
+
+### Отметка посещения
+
+```
+PATCH /api/bookings/{booking_id}/attendance     (auth: только владелец бизнеса этой брони)
+```
+```json
+{"status": "late", "extra_wait_minutes": 5}
+```
+
+- `status` — одно из: `visited` (пришёл вовремя), `late` (опоздал), `no_show` (не пришёл). Другое значение → `422`.
+- `extra_wait_minutes` — только для `late`, от 0 до 10 (сколько бизнес ждал). Для остальных статусов сбрасывается в `0`.
+- Отмечать можно только подтверждённую бронь (`confirmed`). `visited` переводит бронь в `completed`, но отметку можно поменять и после этого: `late` / `no_show` вернут бронь в `confirmed`.
+- Ответ `200` — бронь целиком, в `attendance_status` сохранённая отметка.
+- Повторная отправка той же отметки ничего не меняет. Новая отметка **заменяет** прежнюю, а не добавляет вторую оценку.
+- Ошибки: `400 "Booking must be confirmed first."` — бронь не подтверждена (`pending`, `cancelled`, `rejected`); `400` — `extra_wait_minutes` больше 10 или меньше 0; `401` — без токена; `403 "Only the business owner can update attendance."`; `404 "Booking not found."`.
+
+### Рейтинг клиента
+
+```
+GET /api/reviews/customer/{customer_id}/rating      (публичный)
+```
+```json
+{
+  "user_id": 5, "username": "+998901234567",
+  "rating": 4.0, "reviews_count": 1,
+  "booking_rating": 3.5,
+  "evaluated_bookings_count": 3,
+  "on_time_count": 1, "late_count": 1, "no_show_count": 1
+}
+```
+
+- `rating` и `reviews_count` — как раньше, только отзывы бизнесов о клиенте.
+- `booking_rating` — отдельный рейтинг посещений: среднее по отметкам, `visited` = 5, `late` = 3, `no_show` = 2.5, округление до 2 знаков. `null`, если ни одна бронь не отмечена.
+- `evaluated_bookings_count` = `on_time_count` + `late_count` + `no_show_count`. Учитывается только текущая отметка каждой брони; отменённые брони не учитываются (даже если были отмечены до отмены).
+- `404 "Customer not found."` — пользователя нет или он не клиент.
 
 ---
 

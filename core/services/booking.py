@@ -689,19 +689,26 @@ def delete_booking(
         "message": "Booking deleted successfully"
     }
 
+ATTENDANCE_STATUSES = ("visited", "late", "no_show")
+
+# Bookings the business accepted; "completed" comes from a visited mark
+MARKABLE_STATUSES = ("confirmed", "completed")
+
+MAX_EXTRA_WAIT_MINUTES = 10
+
+
 def update_booking_attendance(
     user,
     booking_id: int,
     status: str,
     extra_wait_minutes: int = 0
 ):
-    allowed_statuses = {
-        "visited",
-        "late",
-        "no_show",
-    }
-
-    if status not in allowed_statuses:
+    """
+    Marks how the customer showed up. The customer's booking rating is built
+    from the current mark of each booking (customer_booking_rating), so a new
+    mark replaces the previous one and repeating a mark changes nothing.
+    """
+    if status not in ATTENDANCE_STATUSES:
         raise HttpError(
             400,
             "Status must be visited, late or no_show."
@@ -722,8 +729,8 @@ def update_booking_attendance(
             "Only the business owner can update attendance."
         )
 
-    # Booking must first be accepted
-    if booking.status != "confirmed":
+    # Booking must first be accepted; an already marked one can be re-marked
+    if booking.status not in MARKABLE_STATUSES:
         raise HttpError(
             400,
             "Booking must be confirmed first."
@@ -736,23 +743,28 @@ def update_booking_attendance(
                 "Extra wait minutes cannot be negative."
             )
 
-        # Requirement currently mentions 10 minutes.
-        if extra_wait_minutes > 10:
+        if extra_wait_minutes > MAX_EXTRA_WAIT_MINUTES:
             raise HttpError(
                 400,
-                "Maximum extra waiting time is 10 minutes."
+                f"Maximum extra waiting time is {MAX_EXTRA_WAIT_MINUTES} minutes."
             )
 
     else:
         extra_wait_minutes = 0
 
+    if (
+        booking.attendance_status == status
+        and booking.extra_wait_minutes == extra_wait_minutes
+    ):
+        return booking
+
     booking.attendance_status = status
     booking.extra_wait_minutes = extra_wait_minutes
     booking.attendance_updated_at = timezone.now()
 
-    # Visited means appointment was completed.
-    if status == "visited":
-        booking.status = "completed"
+    # Visited means the appointment was completed; changing the mark away
+    # from visited takes the booking back to confirmed
+    booking.status = "completed" if status == "visited" else "confirmed"
 
     booking.save(
         update_fields=[

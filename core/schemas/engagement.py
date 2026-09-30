@@ -1,4 +1,5 @@
 from ninja import Schema
+from pydantic import Field
 from typing import Optional
 from datetime import datetime
 
@@ -45,8 +46,19 @@ class ReviewOutSchema(Schema):
 class CustomerRatingSchema(Schema):
     user_id: int
     username: str
-    rating: float
-    reviews_count: int
+    rating: float = Field(..., description="Average of business reviews about the customer, 0 if none")
+    reviews_count: int = Field(..., description="Number of business reviews about the customer")
+    booking_rating: Optional[float] = Field(
+        ...,
+        description="Average attendance score over evaluated bookings: visited 5, late 3, "
+                    "no_show 2.5. null if no booking has been evaluated.",
+    )
+    evaluated_bookings_count: int = Field(
+        ..., description="Bookings with an attendance mark, cancelled ones excluded"
+    )
+    on_time_count: int = Field(..., description="Bookings marked visited")
+    late_count: int = Field(..., description="Bookings marked late")
+    no_show_count: int = Field(..., description="Bookings marked no_show")
 
 # --- FAVORITE SCHEMAS ---
 class FavoriteCreateSchema(Schema):

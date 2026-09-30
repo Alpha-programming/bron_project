@@ -458,13 +458,37 @@ def reschedule_booking_view(
 @router.patch(
     "/{booking_id}/attendance",
     auth=JWTAuth(),
-    response=BookingOutSchema
+    response={
+        200: BookingOutSchema,
+        400: ErrorSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+    },
+    summary="Mark customer attendance",
 )
 def update_booking_attendance_view(
     request,
     booking_id: int,
     payload: BookingAttendanceSchema
 ):
+    """
+    JWT auth, owner of the booking's business only.
+
+    - `status`: `visited` (came on time), `late` or `no_show`.
+    - `extra_wait_minutes`: only for `late`, 0-10; reset to 0 otherwise.
+    - Allowed for a confirmed booking. `visited` sets the booking status to
+      `completed`; the mark can still be changed later, and `late` / `no_show`
+      then return the booking to `confirmed`.
+    - The mark feeds the customer's `booking_rating`
+      (GET /api/reviews/customer/{customer_id}/rating). A new mark replaces
+      the previous one; sending the same mark again changes nothing.
+    - Response: the booking with the saved `attendance_status`.
+
+    Errors: 400 booking not confirmed, or extra_wait_minutes out of range;
+    401 missing or invalid token; 403 not the business owner; 404 booking
+    not found; 422 status is not visited, late or no_show.
+    """
 
     return update_booking_attendance(
         request.auth,
