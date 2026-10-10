@@ -15,7 +15,7 @@ def get_all_businesses():
 
 
 def get_user_businesses(user):
-    """All businesses of the owner, including ones waiting for approval."""
+    """All businesses of the owner, including ones hidden by an admin."""
     return Business.objects.select_related(
         "owner",
         "category",

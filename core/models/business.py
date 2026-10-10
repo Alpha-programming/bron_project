@@ -69,7 +69,8 @@ class Business(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
-    is_active = models.BooleanField(default=False)
+    # New businesses are visible right away; an admin can hide one by unticking it
+    is_active = models.BooleanField(default=True)
 
     # Denormalised count of views, see BusinessView
     views_count = models.PositiveIntegerField(default=0)
