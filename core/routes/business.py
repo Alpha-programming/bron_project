@@ -32,8 +32,8 @@ def create_business_view(request, payload: BusinessCreateSchema):
 @router.get("/my", auth=JWTAuth(), response=List[BusinessOutSchema])
 def my_businesses(request):
     """
-    Businesses of the current user, newest first, including ones still
-    waiting for admin approval (status "pending").
+    Businesses of the current user, newest first, including ones hidden
+    by an admin (status "pending").
     """
     return get_user_businesses(request.auth)
 

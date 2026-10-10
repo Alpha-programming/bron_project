@@ -11,7 +11,7 @@ BusinessStatus = Literal["approved", "pending"]
 
 
 def _business_status(obj):
-    """New businesses stay inactive until an admin approves them."""
+    """New businesses are active right away; "pending" means an admin hid it."""
     return "approved" if obj.is_active else "pending"
 
 
