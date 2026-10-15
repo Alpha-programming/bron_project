@@ -1,7 +1,17 @@
+from typing import Literal
+
 from ninja import Schema
 from pydantic import Field
 
 from core.utils.helpers import absolute_media_url
+
+# Exact values of the role field, always lowercase snake_case
+UserRole = Literal["customer", "business_owner", "admin", "staff"]
+
+ROLE_DESCRIPTION = (
+    "customer, or business_owner when the user owns at least one business "
+    "(including one hidden by an admin); admin and staff are set by an admin"
+)
 
 class PhoneTgSchema(Schema):
     phone: str
@@ -17,7 +27,7 @@ class UserProfileOutSchema(Schema):
     phone: str
     telegram_id: int | None = None
     avatar: str | None = None
-    role: str
+    role: UserRole = Field(..., description=ROLE_DESCRIPTION)
     language: str
     is_verified: bool
     rating: float
@@ -30,6 +40,10 @@ class UserProfileOutSchema(Schema):
     @staticmethod
     def resolve_avatar(obj, context):
         return absolute_media_url(context["request"], obj.avatar)
+
+    @staticmethod
+    def resolve_role(obj):
+        return obj.profile_role
 
 class UserProfileUpdateSchema(Schema):
 
