@@ -70,5 +70,15 @@ class User(AbstractUser):
             review_type="customer"
         ).count()
 
+    @property
+    def profile_role(self):
+        # Creating a business keeps the stored role "customer" on purpose:
+        # customer reviews and ratings look users up by it. The API still
+        # reports such a user as a business owner.
+        if self.role == "customer" and self.businesses.exists():
+            return "business_owner"
+
+        return self.role
+
     def __str__(self):
         return self.username
